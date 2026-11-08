@@ -1,0 +1,2472 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TuProfe20 Blackboard Pro — Edición Matemática & Geometría</title>
+    <!-- MathJax Configuration -->
+    <script>
+        window.MathJax = {
+            svg: { fontCache: "none" },
+            startup: { typeset: false }
+        };
+    </script>
+    <!-- MathJax 3.2.2 -->
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- Fabric.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- html2canvas and jsPDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        /* Modern Reset and Whiteboard Base Styles (Default White) */
+        :root {
+            --bg-board: #ffffff;
+            --grid-line: rgba(15, 23, 42, 0.06);
+            --panel-bg: rgba(255, 255, 255, 0.94);
+            --panel-border: rgba(226, 232, 240, 0.9);
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --btn-hover: #f1f5f9;
+            --accent: #2563eb;
+        }
+
+        body.dark-board {
+            --bg-board: #12121e;
+            --grid-line: rgba(255, 255, 255, 0.05);
+            --panel-bg: rgba(30, 30, 46, 0.94);
+            --panel-border: rgba(255, 255, 255, 0.1);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --btn-hover: rgba(255, 255, 255, 0.1);
+            --accent: #3b82f6;
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; font-family: 'Inter', sans-serif;
+            background-color: var(--bg-board); color: var(--text-main);
+            user-select: none; -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        /* Floating Glass Panels */
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.12), 0 4px 12px -2px rgba(0, 0, 0, 0.06);
+        }
+
+        /* Left Toolbar */
+        #toolbar {
+            position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
+            border-radius: 16px; padding: 8px;
+            display: flex; flex-direction: column; gap: 6px; z-index: 100;
+            transition: all 0.25s ease;
+            max-height: 90vh; overflow-y: auto;
+        }
+        #toolbar::-webkit-scrollbar { width: 0px; }
+
+        .tool-btn {
+            background: transparent; border: none; color: var(--text-muted);
+            font-size: 1.05rem; width: 40px; height: 40px; border-radius: 10px;
+            cursor: pointer; transition: all 0.18s; display: flex;
+            justify-content: center; align-items: center; position: relative;
+            flex-shrink: 0;
+        }
+        .tool-btn:hover { background: var(--btn-hover); color: var(--text-main); }
+        .tool-btn.active { background: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35); }
+        .tool-shortcut {
+            position: absolute; bottom: 2px; right: 4px; font-size: 0.55rem;
+            font-weight: 700; opacity: 0.65; pointer-events: none;
+        }
+
+        /* Top Panel */
+        #top-panel {
+            position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+            border-radius: 18px; padding: 8px 16px; display: flex;
+            gap: 8px; align-items: center; z-index: 100; flex-wrap: nowrap;
+            max-width: 96vw; overflow-x: auto;
+        }
+        #top-panel::-webkit-scrollbar { height: 0px; }
+
+        .action-btn {
+            background: var(--btn-hover); border: 1px solid var(--panel-border);
+            padding: 7px 12px; border-radius: 10px; color: var(--text-main); cursor: pointer;
+            font-size: 0.82rem; font-weight: 500; transition: all 0.2s;
+            display: flex; align-items: center; gap: 6px; white-space: nowrap;
+        }
+        .action-btn:hover { background: rgba(37, 99, 235, 0.1); border-color: var(--accent); color: var(--accent); }
+        .action-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .action-btn.primary:hover { opacity: 0.92; color: #fff; }
+        .action-btn.danger { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); color: #ef4444; }
+        .action-btn.danger:hover { background: #ef4444; color: #fff; }
+
+        /* Canvas Container */
+        #canvas-container {
+            width: 100%; height: 100%; position: relative;
+            background-color: var(--bg-board);
+            background-image: linear-gradient(var(--grid-line) 1px, transparent 1px),
+                              linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+            background-size: 25px 25px;
+            transition: background-color 0.2s;
+        }
+        #canvas-container.no-grid { background-image: none; }
+
+        /* Laser Trail Canvas Overlay */
+        #laser-canvas {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 80;
+        }
+
+        /* Properties Panel (Right) */
+        #properties-panel {
+            position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+            padding: 14px; border-radius: 16px; width: 205px;
+            display: flex; flex-direction: column; gap: 12px; z-index: 99;
+            max-height: 86vh; overflow-y: auto;
+        }
+        .color-picker {
+            width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+            border: 2px solid rgba(148, 163, 184, 0.4); transition: transform 0.15s;
+        }
+        .color-picker.selected { border-color: var(--accent); transform: scale(1.18); box-shadow: 0 0 0 2px rgba(37,99,235,0.25); }
+
+        /* Modals */
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(4px);
+            z-index: 1000; justify-content: center; align-items: center; padding: 16px;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: var(--panel-bg); color: var(--text-main);
+            padding: 24px; border-radius: 18px; width: 100%; max-width: 540px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--panel-border); max-height: 90vh; overflow-y: auto;
+        }
+
+        /* Presentation Mode (#10) */
+        body.presentation-mode #top-panel,
+        body.presentation-mode #properties-panel { display: none !important; }
+        body.presentation-mode #toolbar {
+            flex-direction: row; top: auto; bottom: 20px; left: 50%;
+            transform: translateX(-50%); padding: 8px 14px; border-radius: 999px;
+        }
+        #presentation-exit-badge {
+            display: none; position: fixed; top: 14px; left: 14px; z-index: 200;
+        }
+        body.presentation-mode #presentation-exit-badge { display: flex; }
+
+        /* Visible Timer (#12) */
+        #timer-widget {
+            position: absolute; top: 80px; right: 240px;
+            padding: 10px 16px; border-radius: 14px;
+            display: none; align-items: center; gap: 12px; z-index: 120;
+            cursor: move;
+        }
+        #timer-display { font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+        .timer-warning { color: #d97706 !important; }
+        .timer-danger { color: #dc2626 !important; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        /* Curtain (#11) */
+        #curtain {
+            position: absolute; top: 0; left: 0; width: 100%; height: 65%;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            z-index: 75; display: none;
+            border-bottom: 6px solid #3b82f6;
+            border-right: 6px solid #3b82f6;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.35);
+            color: #f8fafc;
+        }
+        .curtain-handle-bottom {
+            position: absolute; bottom: -16px; left: 50%; transform: translateX(-50%);
+            background: #3b82f6; color: white; padding: 2px 18px; border-radius: 99px;
+            font-size: 0.75rem; font-weight: 600; cursor: ns-resize; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+        .curtain-handle-right {
+            position: absolute; right: -16px; top: 50%; transform: translateY(-50%);
+            background: #3b82f6; color: white; padding: 18px 4px; border-radius: 99px;
+            font-size: 0.75rem; font-weight: 600; cursor: ew-resize; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+
+        /* Virtual Geometry Instruments (#13) */
+        .geo-instrument {
+            position: absolute; z-index: 70; display: none;
+            background: rgba(254, 249, 195, 0.88);
+            backdrop-filter: blur(4px);
+            border: 2px solid #ca8a04;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.18);
+            color: #713f12; cursor: move;
+        }
+        #virtual-ruler {
+            width: 500px; height: 70px; top: 200px; left: 300px;
+            border-radius: 6px; transform-origin: center center;
+        }
+        #virtual-protractor {
+            width: 340px; height: 175px; top: 260px; left: 360px;
+            border-radius: 175px 175px 0 0; transform-origin: 50% 100%;
+        }
+        #virtual-compass {
+            width: 240px; height: 90px; top: 300px; left: 400px;
+            background: rgba(219, 234, 254, 0.9); border-color: #2563eb; color: #1e3a8a;
+            border-radius: 12px; padding: 10px;
+        }
+
+        /* Toast Notifications */
+        #toast-box {
+            position: fixed; bottom: 20px; right: 20px; z-index: 2000;
+            display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+        }
+        .toast-item {
+            background: #1e293b; color: #fff; padding: 10px 16px; border-radius: 10px;
+            font-size: 0.85rem; font-weight: 500; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            display: flex; align-items: center; gap: 8px; animation: slideUp 0.25s ease;
+        }
+        @keyframes slideUp { from { transform: translateY(15px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <!-- Top Action Panel -->
+    <div id="top-panel" class="glass-panel">
+        <div class="flex items-center gap-2 pr-2 border-r border-slate-200 dark:border-slate-700">
+            <span class="font-bold text-blue-600 text-sm tracking-tight flex items-center gap-1.5">
+                <i class="fas fa-chalkboard-user"></i> TuProfe20
+            </span>
+        </div>
+
+        <!-- Undo / Redo (#4) -->
+        <button class="action-btn" onclick="undo()" title="Deshacer (Ctrl+Z)">
+            <i class="fas fa-undo"></i>
+        </button>
+        <button class="action-btn" onclick="redo()" title="Rehacer (Ctrl+Y)">
+            <i class="fas fa-redo"></i>
+        </button>
+
+        <!-- PDF Import (#1) & Image Import (#26) -->
+        <button class="action-btn" onclick="openModal('pdf-modal')" title="Importar práctica o examen PDF en páginas">
+            <i class="fas fa-file-pdf text-red-500"></i> PDF
+        </button>
+        <button class="action-btn" onclick="document.getElementById('img-upload').click()" title="Insertar imagen optimizada">
+            <i class="fas fa-image text-emerald-600"></i> Imagen
+        </button>
+        <input type="file" id="img-upload" accept="image/*" class="hidden" onchange="handleOptimizedImageUpload(event)">
+
+        <!-- Formula LaTeX (#21) -->
+        <button class="action-btn" onclick="openMathModal()" title="Insertar o Editar Ecuación LaTeX">
+            <i class="fas fa-square-root-variable text-purple-600"></i> Fórmula
+        </button>
+
+        <!-- Math Library & Coordinate Planes (#18, #19) -->
+        <button class="action-btn" onclick="openModal('math-lib-modal')" title="Planos cartesianos, rectas y figuras 2D/3D">
+            <i class="fas fa-shapes text-indigo-600"></i> Biblioteca Mat.
+        </button>
+
+        <!-- Virtual Instruments (#13) -->
+        <button class="action-btn" onclick="openModal('instruments-modal')" title="Regla, Transportador y Compás Virtual">
+            <i class="fas fa-compass-drafting text-amber-600"></i> Instrumentos
+        </button>
+
+        <!-- Page Navigation & Manager (#8) -->
+        <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-xl border border-slate-200 dark:border-slate-700">
+            <button class="tool-btn" style="width:28px; height:28px;" onclick="prevPage()" title="Página anterior"><i class="fas fa-chevron-left text-xs"></i></button>
+            <button onclick="openPageManager()" class="px-2 text-xs font-semibold hover:text-blue-600 transition" title="Administrar páginas (Duplicar, renombrar, reordenar)">
+                <span id="page-indicator">1 / 1</span> <i class="fas fa-layer-group ml-1"></i>
+            </button>
+            <button class="tool-btn" style="width:28px; height:28px;" onclick="nextPage()" title="Página siguiente"><i class="fas fa-chevron-right text-xs"></i></button>
+            <button class="tool-btn" style="width:28px; height:28px;" onclick="addPage()" title="Añadir página"><i class="fas fa-plus text-xs text-blue-600"></i></button>
+        </div>
+
+        <!-- Timer (#12), Curtain (#11), Presentation (#10) -->
+        <button class="action-btn" onclick="openModal('timer-modal')" title="Temporizador visible con pausa">
+            <i class="fas fa-stopwatch text-orange-500"></i> Reloj
+        </button>
+        <button class="action-btn" onclick="toggleCurtain()" title="Cortina cubre-soluciones">
+            <i class="fas fa-person-booth text-cyan-600"></i> Cortina
+        </button>
+        <button class="action-btn" onclick="togglePresentation()" title="Modo presentación (Ocultar paneles)">
+            <i class="fas fa-tv"></i> Presentar
+        </button>
+
+        <!-- Export Material (#23, #24, #25) -->
+        <button class="action-btn primary" onclick="openModal('export-modal')" title="Exportar PDF de alta nitidez o Imágenes">
+            <i class="fas fa-download"></i> Exportar
+        </button>
+
+        <!-- Theme Switch (Whiteboard Default) -->
+        <button class="action-btn" onclick="toggleBoardTheme()" id="theme-btn" title="Cambiar fondo (Blanco / Oscuro)">
+            <i class="fas fa-moon"></i>
+        </button>
+
+        <!-- Clear Canvas -->
+        <button class="action-btn danger" onclick="openModal('clear-modal')" title="Limpiar página actual">
+            <i class="fas fa-trash-can"></i>
+        </button>
+    </div>
+
+    <!-- Presentation Exit Floating Button (#10) -->
+    <div id="presentation-exit-badge" class="gap-2">
+        <button class="action-btn primary shadow-lg" onclick="togglePresentation()">
+            <i class="fas fa-compress"></i> Salir de Presentación (Esc)
+        </button>
+        <div class="glass-panel px-3 py-1.5 rounded-xl flex items-center gap-2 text-xs font-semibold">
+            <button onclick="prevPage()" class="hover:text-blue-600"><i class="fas fa-chevron-left"></i></button>
+            <span id="pres-page-indicator">1 / 1</span>
+            <button onclick="nextPage()" class="hover:text-blue-600"><i class="fas fa-chevron-right"></i></button>
+        </div>
+    </div>
+
+    <!-- Left Toolbar with Keyboard Shortcuts (#9) -->
+    <div id="toolbar" class="glass-panel">
+        <button class="tool-btn active" id="btn-select" onclick="setTool('select')" title="Seleccionar y Mover (V)">
+            <i class="fas fa-arrow-pointer"></i><span class="tool-shortcut">V</span>
+        </button>
+        <button class="tool-btn" id="btn-pan" onclick="setTool('pan')" title="Mano / Desplazar lienzo (H)">
+            <i class="fas fa-hand"></i><span class="tool-shortcut">H</span>
+        </button>
+        <button class="tool-btn" id="btn-draw" onclick="setTool('draw')" title="Lápiz libre (P)">
+            <i class="fas fa-pen"></i><span class="tool-shortcut">P</span>
+        </button>
+        <button class="tool-btn" id="btn-highlighter" onclick="setTool('highlighter')" title="Resaltador / Pluma (M)">
+            <i class="fas fa-highlighter"></i><span class="tool-shortcut">M</span>
+        </button>
+        <button class="tool-btn" id="btn-laser" onclick="setTool('laser')" title="Puntero Láser con rastro (L)">
+            <i class="fas fa-wand-magic-sparkles text-rose-500"></i><span class="tool-shortcut">L</span>
+        </button>
+        <button class="tool-btn" id="btn-erase-obj" onclick="setTool('erase-obj')" title="Borrador por Objeto o Zona (E)">
+            <i class="fas fa-eraser"></i><span class="tool-shortcut">E</span>
+        </button>
+        <button class="tool-btn" id="btn-text" onclick="setTool('text')" title="Texto Editable (T)">
+            <i class="fas fa-font"></i><span class="tool-shortcut">T</span>
+        </button>
+        <hr class="border-slate-200 dark:border-slate-700 my-0.5">
+        <button class="tool-btn" id="btn-line" onclick="addLineOrArrow('line')" title="Segmento / Línea con medida">
+            <i class="fas fa-slash"></i>
+        </button>
+        <button class="tool-btn" id="btn-arrow" onclick="addLineOrArrow('arrow')" title="Flecha / Vector (#17)">
+            <i class="fas fa-arrow-up-right-from-square"></i>
+        </button>
+        <button class="tool-btn" id="btn-connect" onclick="setTool('connect')" title="Conexión dinámica entre figuras (#16)">
+            <i class="fas fa-diagram-project text-blue-500"></i>
+        </button>
+        <button class="tool-btn" id="btn-rect" onclick="addShape('rect')" title="Rectángulo">
+            <i class="far fa-square"></i>
+        </button>
+        <button class="tool-btn" id="btn-circle" onclick="addShape('circle')" title="Circunferencia">
+            <i class="far fa-circle"></i>
+        </button>
+        <button class="tool-btn" id="btn-triangle" onclick="addPolygonPreset('triangle')" title="Triángulo Editable por Vértices (#15)">
+            <i class="fas fa-play -rotate-90 text-sm"></i>
+        </button>
+        <button class="tool-btn" id="btn-curve" onclick="addEditableCurve()" title="Curva Bézier Editable (#15)">
+            <i class="fas fa-bezier-curve"></i>
+        </button>
+    </div>
+
+    <!-- Right Properties & Math Context Panel -->
+    <div id="properties-panel" class="glass-panel">
+        <!-- Color Palette -->
+        <div>
+            <div class="text-[11px] text-slate-400 font-bold mb-2 uppercase tracking-wider flex justify-between">
+                <span>Color</span>
+                <input type="color" id="custom-color-input" class="w-4 h-4 cursor-pointer border-0 p-0 bg-transparent" onchange="setColor(this.value, null)" title="Color personalizado">
+            </div>
+            <div class="grid grid-cols-4 gap-2">
+                <div class="color-picker selected" style="background: #0f172a;" onclick="setColor('#0f172a', this)" title="Negro Pizarra"></div>
+                <div class="color-picker" style="background: #2563eb;" onclick="setColor('#2563eb', this)" title="Azul"></div>
+                <div class="color-picker" style="background: #dc2626;" onclick="setColor('#dc2626', this)" title="Rojo"></div>
+                <div class="color-picker" style="background: #16a34a;" onclick="setColor('#16a34a', this)" title="Verde"></div>
+                <div class="color-picker" style="background: #d97706;" onclick="setColor('#d97706', this)" title="Ámbar"></div>
+                <div class="color-picker" style="background: #9333ea;" onclick="setColor('#9333ea', this)" title="Morado"></div>
+                <div class="color-picker" style="background: #0891b2;" onclick="setColor('#0891b2', this)" title="Cian"></div>
+                <div class="color-picker" style="background: #ffffff;" onclick="setColor('#ffffff', this)" title="Blanco"></div>
+            </div>
+        </div>
+
+        <!-- Stroke & Tablet Pressure (#22) -->
+        <div>
+            <div class="flex justify-between items-center text-[11px] text-slate-400 font-bold mb-1 uppercase tracking-wider">
+                <span>Grosor: <span id="brush-val" class="text-blue-600">4</span>px</span>
+            </div>
+            <input type="range" id="brush-size" min="1" max="40" value="4" class="w-full cursor-pointer accent-blue-600" oninput="setBrushSize(this.value)">
+            
+            <label class="flex items-center gap-2 text-xs mt-2 cursor-pointer text-slate-600 dark:text-slate-300" title="Aprovechar presión de tableta gráfica y rechazar palma">
+                <input type="checkbox" id="stylus-only-toggle" class="rounded accent-blue-600" onchange="toggleStylusMode(this.checked)">
+                <span>Modo Lápiz / Tableta</span>
+            </label>
+        </div>
+
+        <!-- Eraser Mode Selector (#5) -->
+        <div id="eraser-options" class="hidden bg-slate-100 dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div class="text-[10px] font-bold uppercase text-slate-400 mb-1.5">Modo Borrador</div>
+            <div class="grid grid-cols-2 gap-1">
+                <button id="era-obj-btn" onclick="setEraserMode('object')" class="text-xs py-1 px-2 rounded bg-blue-600 text-white font-medium">Por Objeto</button>
+                <button id="era-zone-btn" onclick="setEraserMode('zone')" class="text-xs py-1 px-2 rounded bg-transparent text-slate-600 dark:text-slate-300 font-medium">Por Zona</button>
+            </div>
+        </div>
+
+        <!-- Line Style: Solid / Dashed (#17) -->
+        <div>
+            <div class="text-[11px] text-slate-400 font-bold mb-1.5 uppercase tracking-wider">Estilo de Trazo</div>
+            <div class="grid grid-cols-3 gap-1">
+                <button onclick="setDashStyle('solid')" id="dash-solid" class="action-btn justify-center py-1 text-xs border-blue-500 text-blue-600">Sólido</button>
+                <button onclick="setDashStyle('dashed')" id="dash-dashed" class="action-btn justify-center py-1 text-xs">Guion</button>
+                <button onclick="setDashStyle('dotted')" id="dash-dotted" class="action-btn justify-center py-1 text-xs">Punto</button>
+            </div>
+        </div>
+
+        <!-- Quick Math Labels & Measures (#14) -->
+        <div>
+            <div class="text-[11px] text-slate-400 font-bold mb-1.5 uppercase tracking-wider">Etiquetas Rápidas</div>
+            <div class="grid grid-cols-5 gap-1">
+                <button onclick="insertQuickLabel('A')" class="action-btn justify-center p-1 text-xs font-bold">A</button>
+                <button onclick="insertQuickLabel('B')" class="action-btn justify-center p-1 text-xs font-bold">B</button>
+                <button onclick="insertQuickLabel('C')" class="action-btn justify-center p-1 text-xs font-bold">C</button>
+                <button onclick="insertQuickLabel('α')" class="action-btn justify-center p-1 text-xs font-serif italic">α</button>
+                <button onclick="insertQuickLabel('θ')" class="action-btn justify-center p-1 text-xs font-serif italic">θ</button>
+                <button onclick="insertQuickLabel('β')" class="action-btn justify-center p-1 text-xs font-serif italic">β</button>
+                <button onclick="insertQuickLabel('90°')" class="action-btn justify-center p-1 text-[10px] font-bold">90°</button>
+                <button onclick="insertQuickLabel('x')" class="action-btn justify-center p-1 text-xs font-serif italic">x</button>
+                <button onclick="insertQuickLabel('y')" class="action-btn justify-center p-1 text-xs font-serif italic">y</button>
+                <button onclick="measureSelectedObject()" class="action-btn justify-center p-1 text-xs text-blue-600" title="Medir longitud/ángulo de figura"><i class="fas fa-ruler"></i></button>
+            </div>
+        </div>
+
+        <!-- Object Actions: Lock (#6), Order (#7), Edit Vertices (#15), Align (#20) -->
+        <div class="border-t border-slate-200 dark:border-slate-700 pt-2 flex flex-col gap-1.5">
+            <div class="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Elemento Seleccionado</div>
+            
+            <!-- Text formatting (#3) -->
+            <div id="text-controls" class="hidden flex gap-1 mb-1">
+                <input type="number" id="text-size-input" value="26" min="10" max="120" class="w-14 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-1.5 py-0.5 text-xs" onchange="updateSelectedTextSize(this.value)" title="Tamaño de letra">
+                <button onclick="toggleSelectedTextBold()" class="action-btn flex-1 justify-center py-1 text-xs" title="Negrita"><i class="fas fa-bold"></i></button>
+            </div>
+
+            <!-- Edit LaTeX button when formula is selected (#21) -->
+            <button id="edit-latex-btn" onclick="editSelectedMath()" class="action-btn primary w-full justify-center hidden text-xs">
+                <i class="fas fa-pen-to-square"></i> Editar Código LaTeX
+            </button>
+
+            <!-- Edit Vertices button when polygon/curve is selected (#15) -->
+            <button id="edit-vertices-btn" onclick="toggleVertexEdit()" class="action-btn w-full justify-center text-xs">
+                <i class="fas fa-vector-square text-amber-600"></i> Editar Vértices / Curva
+            </button>
+
+            <div class="grid grid-cols-2 gap-1">
+                <button onclick="toggleLockSelected()" id="lock-btn" class="action-btn justify-center py-1.5 text-xs" title="Bloquear / Desbloquear elemento (#6)">
+                    <i class="fas fa-lock"></i> Fijar
+                </button>
+                <button onclick="duplicateSelected()" class="action-btn justify-center py-1.5 text-xs" title="Duplicar selección">
+                    <i class="fas fa-copy"></i> Clonar
+                </button>
+                <button onclick="bringToFront()" class="action-btn justify-center py-1.5 text-xs" title="Traer al frente (#7)">
+                    <i class="fas fa-arrow-up"></i> Frente
+                </button>
+                <button onclick="sendToBack()" class="action-btn justify-center py-1.5 text-xs" title="Enviar al fondo (#7)">
+                    <i class="fas fa-arrow-down"></i> Fondo
+                </button>
+            </div>
+
+            <!-- Alignment & Rotation (#20) -->
+            <div class="grid grid-cols-4 gap-1 mt-1">
+                <button onclick="alignSelected('left')" class="action-btn justify-center p-1.5 text-xs" title="Alinear Izquierda"><i class="fas fa-align-left"></i></button>
+                <button onclick="alignSelected('center-h')" class="action-btn justify-center p-1.5 text-xs" title="Centrar Horizontal"><i class="fas fa-align-center"></i></button>
+                <button onclick=" rotateSelected(-45)" class="action-btn justify-center p-1.5 text-xs" title="Girar -45°"><i class="fas fa-rotate-left"></i></button>
+                <button onclick="rotateSelected(45)" class="action-btn justify-center p-1.5 text-xs" title="Girar +45°"><i class="fas fa-rotate-right"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Visible Timer Widget (#12) -->
+    <div id="timer-widget" class="glass-panel">
+        <i class="fas fa-clock text-blue-600 text-lg"></i>
+        <div id="timer-display">05:00</div>
+        <div class="flex gap-1">
+            <button onclick="pauseResumeTimer()" id="timer-pause-btn" class="action-btn px-2 py-1 text-xs" title="Pausar / Reanudar">
+                <i class="fas fa-pause"></i>
+            </button>
+            <button onclick="stopTimer()" class="action-btn danger px-2 py-1 text-xs" title="Cerrar reloj">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Curtain (#11) -->
+    <div id="curtain">
+        <div class="w-full h-full flex flex-col justify-center items-center pointer-events-none opacity-40">
+            <i class="fas fa-eye-slash text-4xl mb-2"></i>
+            <span class="text-sm font-semibold tracking-wide uppercase">Cortina Oculta-Respuestas — Arrastra los bordes azules</span>
+        </div>
+        <div class="curtain-handle-bottom" id="curtain-drag-y"><i class="fas fa-grip-lines"></i> Arrastrar Vertical</div>
+        <div class="curtain-handle-right" id="curtain-drag-x"><i class="fas fa-grip-lines-vertical"></i></div>
+    </div>
+
+    <!-- Virtual Geometry Instruments (#13) -->
+    <!-- 1. Virtual Ruler -->
+    <div id="virtual-ruler" class="geo-instrument">
+        <div class="w-full h-full relative flex flex-col justify-between p-2">
+            <div id="ruler-ticks" class="w-full h-6 border-b border-yellow-700/40 flex justify-between items-end text-[9px] font-mono px-1"></div>
+            <div class="flex justify-between items-center px-2">
+                <span class="text-xs font-bold flex items-center gap-1.5">
+                    <i class="fas fa-ruler-horizontal"></i> Regla (<span id="ruler-angle-lbl">0°</span>)
+                </span>
+                <div class="flex items-center gap-1.5">
+                    <button onmousedown="event.stopPropagation()" onclick="drawAlongRuler()" class="bg-blue-600 text-white px-2.5 py-1 rounded text-xs font-semibold hover:bg-blue-700">
+                        <i class="fas fa-pen-nib mr-1"></i> Trazar Borde
+                    </button>
+                    <button onmousedown="event.stopPropagation()" onclick="rotateInstrument('ruler', -15)" class="bg-yellow-200 px-1.5 py-1 rounded text-xs font-bold">-15°</button>
+                    <button onmousedown="event.stopPropagation()" onclick="rotateInstrument('ruler', 15)" class="bg-yellow-200 px-1.5 py-1 rounded text-xs font-bold">+15°</button>
+                    <button onmousedown="event.stopPropagation()" onclick="toggleInstrument('ruler')" class="bg-red-500 text-white px-2 py-1 rounded text-xs"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Virtual Protractor -->
+    <div id="virtual-protractor" class="geo-instrument">
+        <div class="w-full h-full relative flex flex-col justify-end items-center pb-2">
+            <svg viewBox="0 0 340 175" class="absolute inset-0 w-full h-full pointer-events-none">
+                <path d="M 10 170 A 160 160 0 0 1 330 170" fill="none" stroke="#a16207" stroke-width="2" stroke-dasharray="3,3"/>
+                <path d="M 60 170 A 110 110 0 0 1 280 170" fill="none" stroke="#a16207" stroke-width="1"/>
+                <line x1="170" y1="170" x2="170" y2="10" stroke="#ca8a04" stroke-width="1" stroke-dasharray="2,2"/>
+                <circle cx="170" cy="170" r="5" fill="#dc2626"/>
+                <text x="162" y="25" font-size="11" fill="#713f12" font-weight="bold">90°</text>
+                <text x="20" y="165" font-size="10" fill="#713f12" font-weight="bold">180°</text>
+                <text x="305" y="165" font-size="10" fill="#713f12" font-weight="bold">0°</text>
+                <text x="58" y="65" font-size="10" fill="#713f12">135°</text>
+                <text x="262" y="65" font-size="10" fill="#713f12">45°</text>
+            </svg>
+            <div class="z-10 flex items-center gap-1.5 bg-white/80 px-3 py-1 rounded-full shadow">
+                <span class="text-xs font-bold">Ángulo:</span>
+                <input type="number" id="protractor-deg" value="60" min="0" max="180" onmousedown="event.stopPropagation()" class="w-12 text-xs font-bold border border-yellow-600 rounded px-1 py-0.5 text-center">
+                <button onmousedown="event.stopPropagation()" onclick="drawProtractorAngle()" class="bg-blue-600 text-white px-2 py-0.5 rounded text-xs font-semibold">Marcar ∠</button>
+                <button onmousedown="event.stopPropagation()" onclick="toggleInstrument('protractor')" class="bg-red-500 text-white px-1.5 py-0.5 rounded text-xs"><i class="fas fa-times"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Virtual Compass -->
+    <div id="virtual-compass" class="geo-instrument">
+        <div class="flex flex-col gap-2">
+            <div class="flex justify-between items-center">
+                <span class="text-xs font-bold flex items-center gap-1"><i class="fas fa-drafting-compass"></i> Compás Virtual</span>
+                <button onmousedown="event.stopPropagation()" onclick="toggleInstrument('compass')" class="bg-red-500 text-white px-1.5 py-0.5 rounded text-xs"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="flex items-center gap-2 text-xs">
+                <span>Radio: <b id="compass-r-lbl">100</b>px</span>
+                <input type="range" id="compass-radius" min="30" max="300" value="100" onmousedown="event.stopPropagation()" oninput="document.getElementById('compass-r-lbl').innerText=this.value" class="w-24 accent-blue-600">
+            </div>
+            <button onmousedown="event.stopPropagation()" onclick="drawCompassCircle()" class="bg-blue-600 text-white py-1 px-2 rounded text-xs font-semibold hover:bg-blue-700">
+                Trazar Circunferencia con Centro
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Canvas & Laser Overlay (#2) -->
+    <div id="canvas-container">
+        <canvas id="board"></canvas>
+        <canvas id="laser-canvas"></canvas>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-box"></div>
+
+    <!-- ================= MODALS ================= -->
+
+    <!-- 1. PDF Import Modal (#1) -->
+    <div class="modal" id="pdf-modal">
+        <div class="modal-content">
+            <h2 class="text-lg font-bold mb-2 flex items-center gap-2">
+                <i class="fas fa-file-pdf text-red-500"></i> Importar Práctica o Examen PDF
+            </h2>
+            <p class="text-xs text-slate-500 mb-4">Convierte automáticamente cada página del PDF en una página de tu pizarra para resolver encima.</p>
+            <input type="file" id="pdf-upload" accept="application/pdf" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 mb-4"/>
+            <div class="flex items-center gap-2 mb-4 text-xs">
+                <input type="checkbox" id="pdf-lock-bg" checked class="rounded accent-blue-600">
+                <label for="pdf-lock-bg">Bloquear páginas del PDF automáticamente al fondo (#6)</label>
+            </div>
+            <div id="pdf-loading-status" class="hidden text-xs text-blue-600 font-semibold mb-3">
+                <i class="fas fa-spinner fa-spin mr-1"></i> Procesando páginas del PDF...
+            </div>
+            <div class="flex justify-end gap-2">
+                <button class="action-btn" onclick="closeModal('pdf-modal')">Cancelar</button>
+                <button class="action-btn primary" onclick="loadMultiPagePDF()">Convertir en Páginas</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Math LaTeX Modal (#21) -->
+    <div class="modal" id="math-modal">
+        <div class="modal-content">
+            <h2 class="text-lg font-bold mb-2 flex items-center gap-2">
+                <i class="fas fa-square-root-variable text-purple-600"></i> Editor de Fórmulas (LaTeX)
+            </h2>
+            <p class="text-xs text-slate-500 mb-3">Haz doble clic sobre cualquier fórmula de la pizarra para volver a editarla sin recrearla.</p>
+            <div class="flex flex-wrap gap-1 mb-2">
+                <button onclick="appendLatex('\\frac{a}{b}')" class="action-btn text-xs py-1 px-2">Fracción</button>
+                <button onclick="appendLatex('\\sqrt{x}')" class="action-btn text-xs py-1 px-2">Raíz</button>
+                <button onclick="appendLatex('x^{2}')" class="action-btn text-xs py-1 px-2">Potencia</button>
+                <button onclick="appendLatex('\\int_{a}^{b}')" class="action-btn text-xs py-1 px-2">Integral</button>
+                <button onclick="appendLatex('\\sum_{i=1}^{n}')" class="action-btn text-xs py-1 px-2">Sumatoria</button>
+                <button onclick="appendLatex('\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}')" class="action-btn text-xs py-1 px-2">Matriz</button>
+            </div>
+            <textarea id="latex-input" rows="3" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl p-3 text-sm mb-4 font-mono focus:outline-none focus:border-blue-500" placeholder="Ejemplo: x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}"></textarea>
+            <div class="flex justify-end gap-2">
+                <button class="action-btn" onclick="closeModal('math-modal')">Cancelar</button>
+                <button class="action-btn primary" onclick="insertOrUpdateMath()">Guardar Fórmula</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Math & Geometry Library Modal (#18, #19) -->
+    <div class="modal" id="math-lib-modal">
+        <div class="modal-content">
+            <h2 class="text-lg font-bold mb-3 flex items-center gap-2">
+                <i class="fas fa-shapes text-indigo-600"></i> Planos Cartesianos y Biblioteca Matemática
+            </h2>
+            
+            <div class="text-xs font-bold uppercase text-slate-400 mb-2">1. Ejes y Coordenadas Configurables (#18)</div>
+            <div class="grid grid-cols-2 gap-2 mb-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                <div>
+                    <label class="block text-[11px] text-slate-500 mb-1">Paso de Escala (1 unidad = ...)</label>
+                    <select id="axis-step" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-1.5 text-xs">
+                        <option value="1">De 1 en 1 (..., -2, -1, 0, 1, 2, ...)</option>
+                        <option value="2">De 2 en 2 (..., -4, -2, 0, 2, 4, ...)</option>
+                        <option value="5">De 5 en 5 (..., -10, -5, 0, 5, 10, ...)</option>
+                        <option value="10">De 10 en 10</option>
+                    </select>
+                </div>
+                <div class="flex items-end gap-2">
+                    <button onclick="insertCartesianPlane()" class="action-btn primary flex-1 justify-center py-2">
+                        <i class="fas fa-border-all"></i> Plano 2D
+                    </button>
+                    <button onclick="insertNumberLine()" class="action-btn flex-1 justify-center py-2">
+                        <i class="fas fa-arrows-left-right"></i> Recta Num.
+                    </button>
+                </div>
+            </div>
+
+            <div class="text-xs font-bold uppercase text-slate-400 mb-2">2. Figuras Geométricas 2D y Sólidos 3D (#19)</div>
+            <div class="grid grid-cols-3 gap-2 mb-4">
+                <button onclick="insertMathFigure('right-triangle')" class="action-btn flex-col py-3 justify-center">
+                    <i class="fas fa-caret-up text-xl text-blue-600"></i>
+                    <span>Triángulo Rect.</span>
+                </button>
+                <button onclick="insertMathFigure('equilateral')" class="action-btn flex-col py-3 justify-center">
+                    <i class="fas fa-play -rotate-90 text-lg text-emerald-600"></i>
+                    <span>Triángulo Equil.</span>
+                </button>
+                <button onclick="insertMathFigure('cube')" class="action-btn flex-col py-3 justify-center">
+                    <i class="fas fa-cube text-xl text-purple-600"></i>
+                    <span>Prisma / Cubo 3D</span>
+                </button>
+                <button onclick="insertMathFigure('pyramid')" class="action-btn flex-col py-3 justify-center">
+                    <i class="fas fa-mountain text-xl text-amber-600"></i>
+                    <span>Pirámide 3D</span>
+                </button>
+                <button onclick="insertMathFigure('cylinder')" class="action-btn flex-col py-3 justify-center">
+                    <i class="fas fa-database text-xl text-cyan-600"></i>
+                    <span>Cilindro 3D</span>
+                </button>
+                <button onclick="insertMathFigure('axes3d')" class="action-btn flex-col py-3 justify-center">
+                    <i class="fas fa-arrows-to-dot text-xl text-rose-600"></i>
+                    <span>Ejes Espacio XYZ</span>
+                </button>
+            </div>
+
+            <div class="flex justify-end">
+                <button class="action-btn" onclick="closeModal('math-lib-modal')">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Virtual Instruments Modal (#13) -->
+    <div class="modal" id="instruments-modal">
+        <div class="modal-content">
+            <h2 class="text-lg font-bold mb-3 flex items-center gap-2">
+                <i class="fas fa-compass-drafting text-amber-600"></i> Instrumentos de Geometría Manipulables
+            </h2>
+            <div class="grid grid-cols-3 gap-3 mb-4">
+                <button onclick="toggleInstrument('ruler'); closeModal('instruments-modal')" class="action-btn flex-col py-4 justify-center">
+                    <i class="fas fa-ruler-horizontal text-2xl text-amber-600"></i>
+                    <span class="font-semibold">Regla Graduada</span>
+                </button>
+                <button onclick="toggleInstrument('protractor'); closeModal('instruments-modal')" class="action-btn flex-col py-4 justify-center">
+                    <i class="fas fa-Half-circle fa-compass text-2xl text-emerald-600"></i>
+                    <span class="font-semibold">Transportador</span>
+                </button>
+                <button onclick="toggleInstrument('compass'); closeModal('instruments-modal')" class="action-btn flex-col py-4 justify-center">
+                    <i class="fas fa-drafting-compass text-2xl text-blue-600"></i>
+                    <span class="font-semibold">Compás Virtual</span>
+                </button>
+            </div>
+            <div class="flex justify-end">
+                <button class="action-btn" onclick="closeModal('instruments-modal')">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. Page Manager Modal (#8) -->
+    <div class="modal" id="pages-modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-lg font-bold flex items-center gap-2">
+                    <i class="fas fa-layer-group text-blue-600"></i> Administrar Páginas
+                </h2>
+                <button onclick="addPage(); renderPageManagerList()" class="action-btn primary text-xs">
+                    <i class="fas fa-plus"></i> Nueva Página
+                </button>
+            </div>
+            <p class="text-xs text-slate-500 mb-3">Arrastra las filas o usa las flechas para reordenar, renombrar, duplicar o eliminar páginas.</p>
+            <div id="pages-list-container" class="flex flex-col gap-2 max-h-80 overflow-y-auto mb-4 pr-1"></div>
+            <div class="flex justify-end">
+                <button class="action-btn" onclick="closeModal('pages-modal')">Listo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. Timer Modal (#12) -->
+    <div class="modal" id="timer-modal">
+        <div class="modal-content">
+            <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
+                <i class="fas fa-stopwatch text-orange-500"></i> Temporizador Visible para Ejercicios
+            </h2>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Minutos</label>
+                    <input type="number" id="timer-mins" value="5" min="0" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl p-2.5 text-sm font-bold">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Segundos</label>
+                    <input type="number" id="timer-secs" value="0" min="0" max="59" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl p-2.5 text-sm font-bold">
+                </div>
+            </div>
+            <div class="flex justify-end gap-2">
+                <button class="action-btn" onclick="closeModal('timer-modal')">Cancelar</button>
+                <button class="action-btn primary" onclick="startTimer()">Iniciar Reloj</button>
+                <button class="action-btn danger" onclick="stopTimer()">Detener</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 7. Export Material Modal (#23, #24, #25) -->
+    <div class="modal" id="export-modal">
+        <div class="modal-content">
+            <h2 class="text-lg font-bold mb-3 flex items-center gap-2">
+                <i class="fas fa-file-export text-blue-600"></i> Entrega de Material y Exportación
+            </h2>
+
+            <div class="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 mb-3">
+                <h3 class="text-xs font-bold uppercase text-slate-500 mb-2">Exportar a PDF de Alta Nitidez (#23, #24)</h3>
+                <div class="flex flex-col gap-2 mb-3 text-xs">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="pdf-range-type" value="all" checked class="accent-blue-600">
+                        <span>Todas las páginas (<span id="export-total-pages">1</span>)</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="pdf-range-type" value="current" class="accent-blue-600">
+                        <span>Solo la página actual</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="pdf-range-type" value="custom" class="accent-blue-600">
+                        <span>Rango personalizado (ej. 1-3, 5):</span>
+                        <input type="text" id="pdf-custom-range" placeholder="1-2" class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs w-24">
+                    </label>
+                </div>
+                <button onclick="exportBoardToPDF()" class="action-btn primary w-full justify-center py-2">
+                    <i class="fas fa-file-pdf"></i> Descargar PDF de Alta Resolución
+                </button>
+            </div>
+
+            <div class="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 mb-4">
+                <h3 class="text-xs font-bold uppercase text-slate-500 mb-2">Descargar como Imagen o Vector (#23, #25)</h3>
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="exportCurrentPagePNG()" class="action-btn justify-center py-2 text-xs">
+                        <i class="fas fa-image text-emerald-600"></i> Página PNG
+                    </button>
+                    <button onclick="exportSelectedObjectPNG()" class="action-btn justify-center py-2 text-xs">
+                        <i class="fas fa-crop-simple text-blue-600"></i> Selección PNG
+                    </button>
+                    <button onclick="exportVectorSVG()" class="action-btn justify-center py-2 text-xs">
+                        <i class="fas fa-bezier-curve text-purple-600"></i> Vector SVG
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex justify-end">
+                <button class="action-btn" onclick="closeModal('export-modal')">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 8. Clear Confirmation Modal (No native confirm) -->
+    <div class="modal" id="clear-modal">
+        <div class="modal-content max-w-sm">
+            <h2 class="text-lg font-bold mb-2">¿Limpiar esta página?</h2>
+            <p class="text-xs text-slate-500 mb-4">Se eliminarán los trazos y figuras no bloqueados de la página actual. Puedes usar Deshacer (Ctrl+Z) si cambias de opinión.</p>
+            <div class="flex justify-end gap-2">
+                <button class="action-btn" onclick="closeModal('clear-modal')">Cancelar</button>
+                <button class="action-btn danger" onclick="confirmClearCanvas()">Sí, Limpiar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // PDF.js worker config
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // Custom properties serialized across pages & history
+        const EXTRA_PROPS = [
+            'id', 'latex', 'isMath', 'locked', 'isConnection',
+            'connFromId', 'connToId', 'isMeasurement', 'customDash', 'isVertexHandle'
+        ];
+
+        // Core State
+        let canvas;
+        let currentTool = 'select';
+        let currentColor = '#0f172a'; // Dark slate default for white board
+        let currentBrushSize = 4;
+        let currentDashArray = null;
+        let eraserMode = 'object'; // 'object' | 'zone'
+        let isPresentationMode = false;
+        let isDarkBoard = false;
+        let stylusOnlyMode = false;
+
+        // Pagination & Undo/Redo (#4, #8)
+        let pages = [{ name: 'Página 1', json: null }];
+        let currentPageIndex = 0;
+        let undoStack = [];
+        let redoStack = [];
+        let isHistoryLocked = false;
+
+        // Pan / Hand Tool State (#9)
+        let isPanning = false;
+        let lastPanX = 0, lastPanY = 0;
+
+        // Laser Trail State (#2)
+        let laserCtx;
+        let laserTrail = [];
+        let isLaserDown = false;
+
+        // Dynamic Connectors State (#16)
+        let connectFirstObj = null;
+
+        // Vertex Editing State (#15)
+        let editingPolygon = null;
+        let vertexHandles = [];
+
+        // Editing Math Formula State (#21)
+        let editingMathTarget = null;
+
+        // Timer State (#12)
+        let timerInterval = null;
+        let timeRemaining = 0;
+        let isTimerPaused = false;
+
+        // Instruments State (#13)
+        let rulerAngle = 0;
+
+        // Initialize Application
+        window.onload = function() {
+            initCanvas();
+            initLaserOverlay();
+            initRulerTicks();
+            setupCurtain();
+            setupDraggableWidget(document.getElementById('timer-widget'));
+            setupDraggableInstrument(document.getElementById('virtual-ruler'));
+            setupDraggableInstrument(document.getElementById('virtual-protractor'));
+            setupDraggableInstrument(document.getElementById('virtual-compass'));
+            saveStateToHistory();
+            saveCurrentPage();
+        };
+
+        function showToast(msg, icon = 'fa-check-circle') {
+            const box = document.getElementById('toast-box');
+            const el = document.createElement('div');
+            el.className = 'toast-item';
+            el.innerHTML = `<i class="fas ${icon} text-blue-400"></i> <span>${msg}</span>`;
+            box.appendChild(el);
+            setTimeout(() => el.remove(), 2600);
+        }
+
+        function openModal(id) {
+            if (id === 'export-modal') {
+                document.getElementById('export-total-pages').innerText = pages.length;
+            }
+            document.getElementById(id).classList.add('active');
+        }
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        function generateId() {
+            return 'obj_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        function initCanvas() {
+            const container = document.getElementById('canvas-container');
+            canvas = new fabric.Canvas('board', {
+                width: container.clientWidth,
+                height: container.clientHeight,
+                isDrawingMode: false,
+                selection: true,
+                preserveObjectStacking: true
+            });
+
+            fabric.Object.prototype.transparentCorners = false;
+            fabric.Object.prototype.cornerColor = '#2563eb';
+            fabric.Object.prototype.cornerStyle = 'circle';
+            fabric.Object.prototype.borderColor = '#2563eb';
+            fabric.Object.prototype.cornerSize = 9;
+
+            updateBrushConfig();
+
+            //Assign IDs & Save Undo History
+            canvas.on('object:added', (e) => {
+                if (e.target && !e.target.id) e.target.id = generateId();
+                if (!isHistoryLocked && !e.target.isVertexHandle) saveStateToHistory();
+            });
+
+            canvas.on('object:modified', (e) => {
+                updateDynamicConnections();
+                if (!isHistoryLocked) saveStateToHistory();
+            });
+
+            canvas.on('object:removed', (e) => {
+                if (!isHistoryLocked && (!e.target || !e.target.isVertexHandle)) saveStateToHistory();
+            });
+
+            canvas.on('object:moving', (e) => {
+                updateDynamicConnections();
+            });
+
+            // Selection listeners for contextual UI
+            canvas.on('selection:created', updateContextPanel);
+            canvas.on('selection:updated', updateContextPanel);
+            canvas.on('selection:cleared', () => {
+                clearVertexHandles();
+                updateContextPanel();
+            });
+
+            // Double click to edit LaTeX formula (#21) or Polygon vertices (#15)
+            canvas.on('mouse:dblclick', (opt) => {
+                if (opt.target && opt.target.isMath) {
+                    editSelectedMath(opt.target);
+                } else if (opt.target && (opt.target.type === 'polygon' || opt.target.type === 'polyline')) {
+                    toggleVertexEdit();
+                }
+            });
+
+            // Mouse Down handling for Tools
+            canvas.on('mouse:down', function(opt) {
+                const evt = opt.e;
+
+                // Palm Rejection / Stylus Pressure (#22)
+                if (stylusOnlyMode && evt.pointerType === 'touch') {
+                    return;
+                }
+
+                if (currentTool === 'pan') {
+                    isPanning = true;
+                    canvas.selection = false;
+                    lastPanX = evt.clientX;
+                    lastPanY = evt.clientY;
+                    return;
+                }
+
+                if (currentTool === 'erase-obj' && eraserMode === 'object' && opt.target) {
+                    if (opt.target.locked) {
+                        showToast('Este elemento está bloqueado', 'fa-lock');
+                        return;
+                    }
+                    canvas.remove(opt.target);
+                    return;
+                }
+
+                if (currentTool === 'text' && !opt.target) {
+                    addText(canvas.getPointer(evt));
+                    return;
+                }
+
+                if (currentTool === 'connect' && opt.target) {
+                    handleConnectionClick(opt.target);
+                    return;
+                }
+
+                if (currentTool === 'laser') {
+                    isLaserDown = true;
+                    const pt = canvas.getPointer(evt);
+                    laserTrail.push({ x: evt.clientX, y: evt.clientY, time: Date.now() });
+                }
+            });
+
+            canvas.on('mouse:move', function(opt) {
+                const evt = opt.e;
+
+                // Stylus Pressure sensitivity (#22)
+                if (canvas.isDrawingMode && evt.pressure && evt.pressure > 0 && evt.pointerType === 'pen') {
+                    canvas.freeDrawingBrush.width = Math.max(1.5, currentBrushSize * (evt.pressure * 1.7));
+                }
+
+                if (isPanning && currentTool === 'pan') {
+                    const vpt = canvas.viewportTransform;
+                    vpt[4] += evt.clientX - lastPanX;
+                    vpt[5] += evt.clientY - lastPanY;
+                    canvas.requestRenderAll();
+                    lastPanX = evt.clientX;
+                    lastPanY = evt.clientY;
+                }
+
+                if (currentTool === 'laser') {
+                    laserTrail.push({ x: evt.clientX, y: evt.clientY, time: Date.now() });
+                }
+
+                // Drag to erase objects in object mode
+                if (currentTool === 'erase-obj' && eraserMode === 'object' && evt.buttons === 1 && opt.target && !opt.target.locked) {
+                    canvas.remove(opt.target);
+                }
+            });
+
+            canvas.on('mouse:up', function() {
+                isPanning = false;
+                isLaserDown = false;
+            });
+
+            window.addEventListener('resize', resizeCanvas);
+        }
+
+        function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
+            canvas.setWidth(container.clientWidth);
+            canvas.setHeight(container.clientHeight);
+            const laserCanvas = document.getElementById('laser-canvas');
+            laserCanvas.width = container.clientWidth;
+            laserCanvas.height = container.clientHeight;
+            canvas.renderAll();
+        }
+
+        // --- #2 Laser Pointer with Disappearing Trail ---
+        function initLaserOverlay() {
+            const laserCanvas = document.getElementById('laser-canvas');
+            const container = document.getElementById('canvas-container');
+            laserCanvas.width = container.clientWidth;
+            laserCanvas.height = container.clientHeight;
+            laserCtx = laserCanvas.getContext('2d');
+
+            function animateLaser() {
+                laserCtx.clearRect(0, 0, laserCanvas.width, laserCanvas.height);
+                const now = Date.now();
+                laserTrail = laserTrail.filter(p => now - p.time < 550);
+
+                if (laserTrail.length > 1) {
+                    for (let i = 1; i < laserTrail.length; i++) {
+                        const p1 = laserTrail[i - 1];
+                        const p2 = laserTrail[i];
+                        const age = now - p2.time;
+                        const alpha = Math.max(0, 1 - age / 550);
+
+                        laserCtx.beginPath();
+                        laserCtx.moveTo(p1.x, p1.y);
+                        laserCtx.lineTo(p2.x, p2.y);
+                        laserCtx.strokeStyle = `rgba(244, 63, 94, ${alpha})`;
+                        laserCtx.lineWidth = 5 * alpha + 2;
+                        laserCtx.lineCap = 'round';
+                        laserCtx.shadowColor = '#f43f5e';
+                        laserCtx.shadowBlur = 10;
+                        laserCtx.stroke();
+                    }
+                    const head = laserTrail[laserTrail.length - 1];
+                    laserCtx.beginPath();
+                    laserCtx.arc(head.x, head.y, 6, 0, Math.PI * 2);
+                    laserCtx.fillStyle = '#ff0055';
+                    laserCtx.fill();
+                }
+                requestAnimationFrame(animateLaser);
+            }
+            animateLaser();
+        }
+
+        // --- #4 Undo & Redo (Ctrl+Z / Ctrl+Y) ---
+        function saveStateToHistory() {
+            const json = JSON.stringify(canvas.toJSON(EXTRA_PROPS));
+            if (undoStack.length > 0 && undoStack[undoStack.length - 1] === json) return;
+            undoStack.push(json);
+            if (undoStack.length > 40) undoStack.shift();
+            redoStack = [];
+            pages[currentPageIndex].json = json;
+        }
+
+        function undo() {
+            if (undoStack.length <= 1) {
+                showToast('Nada más que deshacer', 'fa-info-circle');
+                return;
+            }
+            isHistoryLocked = true;
+            const current = undoStack.pop();
+            redoStack.push(current);
+            const prev = undoStack[undoStack.length - 1];
+            canvas.loadFromJSON(prev, () => {
+                reapplyLocksAndConnections();
+                canvas.renderAll();
+                pages[currentPageIndex].json = prev;
+                isHistoryLocked = false;
+            });
+        }
+
+        function redo() {
+            if (redoStack.length === 0) {
+                showToast('Nada que rehacer', 'fa-info-circle');
+                return;
+            }
+            isHistoryLocked = true;
+            const next = redoStack.pop();
+            undoStack.push(next);
+            canvas.loadFromJSON(next, () => {
+                reapplyLocksAndConnections();
+                canvas.renderAll();
+                pages[currentPageIndex].json = next;
+                isHistoryLocked = false;
+            });
+        }
+
+        function reapplyLocksAndConnections() {
+            canvas.getObjects().forEach(obj => {
+                if (obj.locked) {
+                    obj.set({
+                        lockMovementX: true, lockMovementY: true,
+                        lockScalingX: true, lockScalingY: true,
+                        lockRotation: true, hasControls: false
+                    });
+                }
+            });
+        }
+
+        // --- Tools & Shortcuts (#9) ---
+        function setTool(tool) {
+            currentTool = tool;
+            clearVertexHandles();
+
+            document.querySelectorAll('#toolbar .tool-btn').forEach(btn => btn.classList.remove('active'));
+            const btn = document.getElementById(`btn-${tool}`);
+            if (btn) btn.classList.add('active');
+
+            // Show/hide eraser sub-panel (#5)
+            const eraPanel = document.getElementById('eraser-options');
+            if (tool === 'erase-obj') {
+                eraPanel.classList.remove('hidden');
+            } else {
+                eraPanel.classList.add('hidden');
+            }
+
+            // Configure Drawing Mode
+            if (tool === 'draw' || tool === 'highlighter' || (tool === 'erase-obj' && eraserMode === 'zone')) {
+                canvas.isDrawingMode = true;
+                updateBrushConfig();
+            } else {
+                canvas.isDrawingMode = false;
+            }
+
+            canvas.selection = (tool === 'select');
+
+            if (tool === 'connect') {
+                connectFirstObj = null;
+                showToast('Haz clic en la 1ra figura y luego en la 2da para conectarlas', 'fa-diagram-project');
+            }
+        }
+
+        function updateBrushConfig() {
+            if (!canvas) return;
+            canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+            if (currentTool === 'highlighter') {
+                canvas.freeDrawingBrush.color = hexToRgba(currentColor, 0.35);
+                canvas.freeDrawingBrush.width = Math.max(18, currentBrushSize * 3);
+                canvas.freeDrawingBrush.strokeLineCap = 'square';
+            } else if (currentTool === 'erase-obj' && eraserMode === 'zone') {
+                // Zone eraser paints with board background color (#5)
+                canvas.freeDrawingBrush.color = isDarkBoard ? '#12121e' : '#ffffff';
+                canvas.freeDrawingBrush.width = Math.max(20, currentBrushSize * 4);
+            } else {
+                canvas.freeDrawingBrush.color = currentColor;
+                canvas.freeDrawingBrush.width = currentBrushSize;
+                canvas.freeDrawingBrush.strokeDashArray = currentDashArray;
+            }
+        }
+
+        function setEraserMode(mode) {
+            eraserMode = mode;
+            document.getElementById('era-obj-btn').className = mode === 'object'
+                ? 'text-xs py-1 px-2 rounded bg-blue-600 text-white font-medium'
+                : 'text-xs py-1 px-2 rounded bg-transparent text-slate-600 dark:text-slate-300 font-medium';
+            document.getElementById('era-zone-btn').className = mode === 'zone'
+                ? 'text-xs py-1 px-2 rounded bg-blue-600 text-white font-medium'
+                : 'text-xs py-1 px-2 rounded bg-transparent text-slate-600 dark:text-slate-300 font-medium';
+            setTool('erase-obj');
+        }
+
+        function hexToRgba(hex, alpha) {
+            let c = hex.replace('#', '');
+            if (c.length === 3) c = c.split('').map(x => x + x).join('');
+            const num = parseInt(c, 16);
+            return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`;
+        }
+
+        function setColor(color, element) {
+            currentColor = color;
+            document.querySelectorAll('.color-picker').forEach(el => el.classList.remove('selected'));
+            if (element) element.classList.add('selected');
+
+            updateBrushConfig();
+
+            const activeObj = canvas.getActiveObject();
+            if (activeObj && !activeObj.locked) {
+                if (activeObj.type === 'i-text' || activeObj.type === 'text') {
+                    activeObj.set('fill', color);
+                } else if (activeObj.isMath && activeObj._objects) {
+                    activeObj._objects.forEach(p => p.set({ fill: color, stroke: color }));
+                } else {
+                    activeObj.set('stroke', color);
+                }
+                canvas.requestRenderAll();
+                saveStateToHistory();
+            }
+        }
+
+        function setBrushSize(size) {
+            currentBrushSize = parseInt(size);
+            document.getElementById('brush-val').innerText = currentBrushSize;
+            updateBrushConfig();
+
+            const activeObj = canvas.getActiveObject();
+            if (activeObj && !activeObj.locked && activeObj.type !== 'i-text') {
+                activeObj.set('strokeWidth', currentBrushSize);
+                canvas.requestRenderAll();
+                saveStateToHistory();
+            }
+        }
+
+        // --- #17 Dashed Lines & Arrows ---
+        function setDashStyle(style) {
+            ['solid', 'dashed', 'dotted'].forEach(s => {
+                document.getElementById(`dash-${s}`).classList.remove('border-blue-500', 'text-blue-600');
+            });
+            document.getElementById(`dash-${style}`).classList.add('border-blue-500', 'text-blue-600');
+
+            if (style === 'solid') currentDashArray = null;
+            else if (style === 'dashed') currentDashArray = [10, 6];
+            else if (style === 'dotted') currentDashArray = [3, 6];
+
+            updateBrushConfig();
+
+            const activeObj = canvas.getActiveObject();
+            if (activeObj && !activeObj.locked) {
+                activeObj.set('strokeDashArray', currentDashArray);
+                canvas.requestRenderAll();
+                saveStateToHistory();
+            }
+        }
+
+        function addLineOrArrow(type) {
+            const center = canvas.getVpCenter();
+            if (type === 'line') {
+                const line = new fabric.Line([center.x - 80, center.y, center.x + 80, center.y], {
+                    stroke: currentColor,
+                    strokeWidth: currentBrushSize,
+                    strokeDashArray: currentDashArray
+                });
+                canvas.add(line);
+                canvas.setActiveObject(line);
+            } else {
+                // Vector / Arrow group
+                const line = new fabric.Line([-70, 0, 60, 0], {
+                    stroke: currentColor,
+                    strokeWidth: currentBrushSize,
+                    strokeDashArray: currentDashArray
+                });
+                const head = new fabric.Triangle({
+                    width: 16, height: 18,
+                    fill: currentColor,
+                    left: 65, top: 0,
+                    angle: 90,
+                    originX: 'center', originY: 'center'
+                });
+                const arrow = new fabric.Group([line, head], {
+                    left: center.x - 60, top: center.y
+                });
+                canvas.add(arrow);
+                canvas.setActiveObject(arrow);
+            }
+            setTool('select');
+        }
+
+        // --- #3 Editable Text with Size & Bold ---
+        function addText(pointer) {
+            const textSize = parseInt(document.getElementById('text-size-input').value) || 26;
+            const text = new fabric.IText('Escribe aquí...', {
+                left: pointer.x,
+                top: pointer.y,
+                fontFamily: 'Inter',
+                fill: currentColor,
+                fontSize: textSize
+            });
+            canvas.add(text);
+            canvas.setActiveObject(text);
+            text.enterEditing();
+            text.selectAll();
+            setTool('select');
+        }
+
+        function updateSelectedTextSize(val) {
+            const obj = canvas.getActiveObject();
+            if (obj && (obj.type === 'i-text' || obj.type === 'text')) {
+                obj.set('fontSize', parseInt(val) || 24);
+                canvas.requestRenderAll();
+                saveStateToHistory();
+            }
+        }
+
+        function toggleSelectedTextBold() {
+            const obj = canvas.getActiveObject();
+            if (obj && (obj.type === 'i-text' || obj.type === 'text')) {
+                obj.set('fontWeight', obj.fontWeight === 'bold' ? 'normal' : 'bold');
+                canvas.requestRenderAll();
+                saveStateToHistory();
+            }
+        }
+
+        function addShape(type) {
+            const center = canvas.getVpCenter();
+            const common = {
+                left: center.x - 50,
+                top: center.y - 50,
+                fill: 'transparent',
+                stroke: currentColor,
+                strokeWidth: currentBrushSize,
+                strokeDashArray: currentDashArray
+            };
+            let shape = type === 'rect'
+                ? new fabric.Rect({ ...common, width: 120, height: 90 })
+                : new fabric.Circle({ ...common, radius: 55 });
+            canvas.add(shape);
+            canvas.setActiveObject(shape);
+            setTool('select');
+        }
+
+        // --- #15 Vertex & Curve Editing ---
+        function addPolygonPreset(kind) {
+            const center = canvas.getVpCenter();
+            let pts = [
+                { x: 0, y: -60 },
+                { x: -65, y: 50 },
+                { x: 65, y: 50 }
+            ];
+            const poly = new fabric.Polygon(pts, {
+                left: center.x - 65,
+                top: center.y - 60,
+                fill: 'transparent',
+                stroke: currentColor,
+                strokeWidth: currentBrushSize,
+                strokeDashArray: currentDashArray,
+                objectCaching: false
+            });
+            canvas.add(poly);
+            canvas.setActiveObject(poly);
+            setTool('select');
+        }
+
+        function addEditableCurve() {
+            const center = canvas.getVpCenter();
+            const pts = [
+                { x: 0, y: 40 },
+                { x: 45, y: -40 },
+                { x: 95, y: -40 },
+                { x: 140, y: 40 }
+            ];
+            const poly = new fabric.Polyline(pts, {
+                left: center.x - 70,
+                top: center.y - 20,
+                fill: 'transparent',
+                stroke: currentColor,
+                strokeWidth: currentBrushSize,
+                strokeDashArray: currentDashArray,
+                objectCaching: false
+            });
+            canvas.add(poly);
+            canvas.setActiveObject(poly);
+            setTool('select');
+            showToast('Pulsa "Editar Vértices" o haz doble clic para mover sus nodos', 'fa-bezier-curve');
+        }
+
+        function clearVertexHandles() {
+            vertexHandles.forEach(h => canvas.remove(h));
+            vertexHandles = [];
+            editingPolygon = null;
+        }
+
+        function toggleVertexEdit() {
+            if (vertexHandles.length > 0) {
+                clearVertexHandles();
+                saveStateToHistory();
+                return;
+            }
+            const obj = canvas.getActiveObject();
+            if (!obj || !obj.points) {
+                showToast('Selecciona un polígono, triángulo o curva para editar sus vértices', 'fa-info-circle');
+                return;
+            }
+            editingPolygon = obj;
+            const matrix = obj.calcTransformMatrix();
+            const offset = obj.pathOffset;
+
+            obj.points.forEach((pt, idx) => {
+                const localPt = new fabric.Point(pt.x - offset.x, pt.y - offset.y);
+                const absPt = fabric.util.transformPoint(localPt, matrix);
+
+                const handle = new fabric.Circle({
+                    left: absPt.x,
+                    top: absPt.y,
+                    radius: 7,
+                    fill: '#f59e0b',
+                    stroke: '#ffffff',
+                    strokeWidth: 2,
+                    originX: 'center',
+                    originY: 'center',
+                    hasControls: false,
+                    hasBorders: false,
+                    isVertexHandle: true
+                });
+
+                handle.on('moving', () => {
+                    const invMatrix = fabric.util.invertTransform(editingPolygon.calcTransformMatrix());
+                    const newLocal = fabric.util.transformPoint(new fabric.Point(handle.left, handle.top), invMatrix);
+                    editingPolygon.points[idx].x = newLocal.x + editingPolygon.pathOffset.x;
+                    editingPolygon.points[idx].y = newLocal.y + editingPolygon.pathOffset.y;
+                    editingPolygon.dirty = true;
+                    canvas.requestRenderAll();
+                });
+
+                vertexHandles.push(handle);
+                canvas.add(handle);
+            });
+            showToast('Arrastra los nodos naranjas para deformar vértices', 'fa-vector-square');
+        }
+
+        // --- #16 Dynamic Connections Following Figures ---
+        function handleConnectionClick(target) {
+            if (!connectFirstObj) {
+                connectFirstObj = target;
+                showToast('Ahora haz clic en la segunda figura', 'fa-link');
+            } else if (connectFirstObj !== target) {
+                const c1 = connectFirstObj.getCenterPoint();
+                const c2 = target.getCenterPoint();
+                const connLine = new fabric.Line([c1.x, c1.y, c2.x, c2.y], {
+                    stroke: currentColor,
+                    strokeWidth: currentBrushSize,
+                    strokeDashArray: currentDashArray,
+                    selectable: true,
+                    isConnection: true,
+                    connFromId: connectFirstObj.id,
+                    connToId: target.id
+                });
+                canvas.add(connLine);
+                canvas.sendToBack(connLine);
+                connectFirstObj = null;
+                setTool('select');
+                showToast('Conexión creada: mueve las figuras para probarla', 'fa-check');
+            }
+        }
+
+        function updateDynamicConnections() {
+            const objs = canvas.getObjects();
+            const map = {};
+            objs.forEach(o => { if (o.id) map[o.id] = o; });
+
+            objs.forEach(o => {
+                if (o.isConnection && o.connFromId && o.connToId) {
+                    const fromObj = map[o.connFromId];
+                    const toObj = map[o.connToId];
+                    if (fromObj && toObj) {
+                        const p1 = fromObj.getCenterPoint();
+                        const p2 = toObj.getCenterPoint();
+                        o.set({ x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y });
+                        o.setCoords();
+                    }
+                }
+            });
+        }
+
+        // --- #14 Quick Labels & Automatic Measurement ---
+        function insertQuickLabel(txt) {
+            const center = canvas.getVpCenter();
+            const label = new fabric.IText(txt, {
+                left: center.x + (Math.random() * 40 - 20),
+                top: center.y + (Math.random() * 40 - 20),
+                fontFamily: 'Inter',
+                fontWeight: 'bold',
+                fontSize: 24,
+                fill: currentColor
+            });
+            canvas.add(label);
+            canvas.setActiveObject(label);
+        }
+
+        function measureSelectedObject() {
+            const obj = canvas.getActiveObject();
+            if (!obj) {
+                showToast('Selecciona un segmento, círculo o figura para mostrar su medida', 'fa-ruler');
+                return;
+            }
+            const center = obj.getCenterPoint();
+            let measureStr = '';
+
+            if (obj.type === 'line') {
+                const dx = (obj.x2 - obj.x1) * obj.scaleX;
+                const dy = (obj.y2 - obj.y1) * obj.scaleY;
+                const distCm = (Math.hypot(dx, dy) / 37.8).toFixed(1);
+                const angleDeg = Math.round((Math.atan2(-dy, dx) * 180) / Math.PI);
+                measureStr = `${distCm} cm (${angleDeg}°)`;
+            } else if (obj.type === 'circle') {
+                const rCm = ((obj.radius * obj.scaleX) / 37.8).toFixed(1);
+                measureStr = `r = ${rCm} cm`;
+            } else {
+                const wCm = (obj.getScaledWidth() / 37.8).toFixed(1);
+                const hCm = (obj.getScaledHeight() / 37.8).toFixed(1);
+                measureStr = `${wCm} × ${hCm} cm`;
+            }
+
+            const tag = new fabric.IText(measureStr, {
+                left: center.x,
+                top: center.y - 25,
+                fontSize: 16,
+                fontFamily: 'Inter',
+                fontWeight: '600',
+                fill: '#2563eb',
+                backgroundColor: 'rgba(239, 246, 255, 0.9)'
+            });
+            canvas.add(tag);
+            canvas.setActiveObject(tag);
+        }
+
+        // --- #6 Lock Elements, #7 Layer Order, #20 Align & Rotate ---
+        function updateContextPanel() {
+            const obj = canvas.getActiveObject();
+            const lockBtn = document.getElementById('lock-btn');
+            const latexBtn = document.getElementById('edit-latex-btn');
+            const textControls = document.getElementById('text-controls');
+
+            if (!obj) {
+                latexBtn.classList.add('hidden');
+                textControls.classList.add('hidden');
+                lockBtn.innerHTML = `<i class="fas fa-lock"></i> Fijar`;
+                return;
+            }
+
+            if (obj.locked) {
+                lockBtn.innerHTML = `<i class="fas fa-lock-open text-amber-500"></i> Soltar`;
+            } else {
+                lockBtn.innerHTML = `<i class="fas fa-lock"></i> Fijar`;
+            }
+
+            if (obj.isMath) {
+                latexBtn.classList.remove('hidden');
+            } else {
+                latexBtn.classList.add('hidden');
+            }
+
+            if (obj.type === 'i-text' || obj.type === 'text') {
+                textControls.classList.remove('hidden');
+                document.getElementById('text-size-input').value = obj.fontSize || 26;
+            } else {
+                textControls.classList.add('hidden');
+            }
+        }
+
+        function toggleLockSelected() {
+            const obj = canvas.getActiveObject();
+            if (!obj) return;
+            obj.locked = !obj.locked;
+            obj.set({
+                lockMovementX: obj.locked,
+                lockMovementY: obj.locked,
+                lockScalingX: obj.locked,
+                lockScalingY: obj.locked,
+                lockRotation: obj.locked,
+                hasControls: !obj.locked
+            });
+            canvas.requestRenderAll();
+            updateContextPanel();
+            saveStateToHistory();
+            showToast(obj.locked ? 'Elemento fijado' : 'Elemento desbloqueado', obj.locked ? 'fa-lock' : 'fa-lock-open');
+        }
+
+        function bringToFront() {
+            const obj = canvas.getActiveObject();
+            if (obj) { canvas.bringToFront(obj); saveStateToHistory(); }
+        }
+
+        function sendToBack() {
+            const obj = canvas.getActiveObject();
+            if (obj) { canvas.sendToBack(obj); saveStateToHistory(); }
+        }
+
+        function duplicateSelected() {
+            const obj = canvas.getActiveObject();
+            if (!obj) return;
+            obj.clone((cloned) => {
+                cloned.set({ left: obj.left + 25, top: obj.top + 25, id: generateId() });
+                canvas.add(cloned);
+                canvas.setActiveObject(cloned);
+            }, EXTRA_PROPS);
+        }
+
+        function alignSelected(mode) {
+            const obj = canvas.getActiveObject();
+            if (!obj) return;
+            if (mode === 'left') {
+                if (obj.type === 'activeSelection') {
+                    const leftMost = -obj.width / 2;
+                    obj.getObjects().forEach(o => o.set('left', leftMost));
+                } else {
+                    obj.set('left', 40);
+                }
+            } else if (mode === 'center-h') {
+                obj.centerH();
+            }
+            obj.setCoords();
+            canvas.requestRenderAll();
+            saveStateToHistory();
+        }
+
+        function rotateSelected(deg) {
+            const obj = canvas.getActiveObject();
+            if (!obj || obj.locked) return;
+            obj.rotate(((obj.angle || 0) + deg) % 360);
+            canvas.requestRenderAll();
+            saveStateToHistory();
+        }
+
+        // --- #22 Tablet Stylus Mode ---
+        function toggleStylusMode(enabled) {
+            stylusOnlyMode = enabled;
+            showToast(enabled ? 'Modo Tableta activo (Rechazo de palma)' : 'Modo táctil estándar');
+        }
+
+        // --- #18 Cartesian Plane & Number Line, #19 Math Figures Library ---
+        function insertCartesianPlane() {
+            const stepVal = parseInt(document.getElementById('axis-step').value) || 1;
+            const center = canvas.getVpCenter();
+            const items = [];
+            const gridUnit = 40;
+            const span = 5; // -5 to +5 units
+
+            // Subtle Grid lines
+            for (let i = -span; i <= span; i++) {
+                const pos = i * gridUnit;
+                items.push(new fabric.Line([pos, -span * gridUnit, pos, span * gridUnit], {
+                    stroke: '#cbd5e1', strokeWidth: i === 0 ? 2.5 : 1
+                }));
+                items.push(new fabric.Line([-span * gridUnit, pos, span * gridUnit, pos], {
+                    stroke: '#cbd5e1', strokeWidth: i === 0 ? 2.5 : 1
+                }));
+                if (i !== 0) {
+                    // X labels
+                    items.push(new fabric.Text((i * stepVal).toString(), {
+                        left: pos - 6, top: 6, fontSize: 12, fontFamily: 'Inter', fill: '#334155'
+                    }));
+                    // Y labels
+                    items.push(new fabric.Text((-i * stepVal).toString(), {
+                        left: 6, top: pos - 7, fontSize: 12, fontFamily: 'Inter', fill: '#334155'
+                    }));
+                }
+            }
+            // Main Axes in dark color
+            items.push(new fabric.Line([-span * gridUnit, 0, span * gridUnit, 0], { stroke: '#0f172a', strokeWidth: 2 }));
+            items.push(new fabric.Line([0, -span * gridUnit, 0, span * gridUnit], { stroke: '#0f172a', strokeWidth: 2 }));
+            items.push(new fabric.Text('X', { left: span * gridUnit + 8, top: -8, fontSize: 14, fontWeight: 'bold', fill: '#0f172a' }));
+            items.push(new fabric.Text('Y', { left: -6, top: -span * gridUnit - 22, fontSize: 14, fontWeight: 'bold', fill: '#0f172a' }));
+
+            const planeGroup = new fabric.Group(items, { left: center.x - 200, top: center.y - 200 });
+            canvas.add(planeGroup);
+            canvas.setActiveObject(planeGroup);
+            closeModal('math-lib-modal');
+        }
+
+        function insertNumberLine() {
+            const stepVal = parseInt(document.getElementById('axis-step').value) || 1;
+            const center = canvas.getVpCenter();
+            const items = [];
+            const unit = 45;
+            const span = 6;
+
+            items.push(new fabric.Line([-span * unit - 20, 0, span * unit + 20, 0], { stroke: currentColor, strokeWidth: 2.5 }));
+            for (let i = -span; i <= span; i++) {
+                const x = i * unit;
+                items.push(new fabric.Line([x, -7, x, 7], { stroke: currentColor, strokeWidth: 2 }));
+                items.push(new fabric.Text((i * stepVal).toString(), {
+                    left: x - 6, top: 12, fontSize: 13, fontFamily: 'Inter', fontWeight: 'bold', fill: currentColor
+                }));
+            }
+            const group = new fabric.Group(items, { left: center.x - 270, top: center.y });
+            canvas.add(group);
+            canvas.setActiveObject(group);
+            closeModal('math-lib-modal');
+        }
+
+        function insertMathFigure(type) {
+            const center = canvas.getVpCenter();
+            let group;
+            const stroke = currentColor;
+
+            if (type === 'right-triangle') {
+                const poly = new fabric.Polygon([{x:0, y:0}, {x:0, y:140}, {x:180, y:140}], {
+                    fill: 'transparent', stroke, strokeWidth: 3
+                });
+                const sq = new fabric.Rect({ left: 0, top: 120, width: 20, height: 20, fill: 'transparent', stroke, strokeWidth: 1.5 });
+                group = new fabric.Group([poly, sq], { left: center.x - 90, top: center.y - 70 });
+            } else if (type === 'equilateral') {
+                group = new fabric.Polygon([{x:80, y:0}, {x:0, y:138}, {x:160, y:138}], {
+                    left: center.x - 80, top: center.y - 70, fill: 'transparent', stroke, strokeWidth: 3
+                });
+            } else if (type === 'cube') {
+                const front = new fabric.Rect({ left: 0, top: 40, width: 110, height: 110, fill: 'transparent', stroke, strokeWidth: 2.5 });
+                const back = new fabric.Rect({ left: 40, top: 0, width: 110, height: 110, fill: 'transparent', stroke, strokeWidth: 2, strokeDashArray: [5,5] });
+                const l1 = new fabric.Line([0, 40, 40, 0], { stroke, strokeWidth: 2.5 });
+                const l2 = new fabric.Line([110, 40, 150, 0], { stroke, strokeWidth: 2.5 });
+                const l3 = new fabric.Line([0, 150, 40, 110], { stroke, strokeWidth: 2, strokeDashArray: [5,5] });
+                const l4 = new fabric.Line([110, 150, 150, 110], { stroke, strokeWidth: 2.5 });
+                group = new fabric.Group([front, back, l1, l2, l3, l4], { left: center.x - 75, top: center.y - 75 });
+            } else if (type === 'pyramid') {
+                const base = new fabric.Polygon([{x:0, y:120}, {x:110, y:120}, {x:150, y:85}, {x:40, y:85}], {
+                    fill: 'transparent', stroke, strokeWidth: 2, strokeDashArray: [5,4]
+                });
+                const e1 = new fabric.Line([75, 0, 0, 120], { stroke, strokeWidth: 2.5 });
+                const e2 = new fabric.Line([75, 0, 110, 120], { stroke, strokeWidth: 2.5 });
+                const e3 = new fabric.Line([75, 0, 150, 85], { stroke, strokeWidth: 2.5 });
+                const e4 = new fabric.Line([75, 0, 40, 85], { stroke, strokeWidth: 1.8, strokeDashArray: [5,5] });
+                const hLine = new fabric.Line([75, 0, 75, 102], { stroke: '#dc2626', strokeWidth: 1.5, strokeDashArray: [3,3] });
+                group = new fabric.Group([base, e1, e2, e3, e4, hLine], { left: center.x - 75, top: center.y - 60 });
+            } else if (type === 'cylinder') {
+                const topEl = new fabric.Ellipse({ left: 0, top: 0, rx: 60, ry: 20, fill: 'transparent', stroke, strokeWidth: 2.5 });
+                const botEl = new fabric.Ellipse({ left: 0, top: 130, rx: 60, ry: 20, fill: 'transparent', stroke, strokeWidth: 2, strokeDashArray: [5,4] });
+                const s1 = new fabric.Line([0, 20, 0, 150], { stroke, strokeWidth: 2.5 });
+                const s2 = new fabric.Line([120, 20, 120, 150], { stroke, strokeWidth: 2.5 });
+                group = new fabric.Group([topEl, botEl, s1, s2], { left: center.x - 60, top: center.y - 75 });
+            } else if (type === 'axes3d') {
+                const zAx = new fabric.Line([0, 0, 0, -140], { stroke: '#2563eb', strokeWidth: 2.5 });
+                const yAx = new fabric.Line([0, 0, 150, 0], { stroke: '#16a34a', strokeWidth: 2.5 });
+                const xAx = new fabric.Line([0, 0, -95, 85], { stroke: '#dc2626', strokeWidth: 2.5 });
+                const tz = new fabric.Text('Z', { left: -6, top: -162, fontSize: 15, fontWeight: 'bold', fill: '#2563eb' });
+                const ty = new fabric.Text('Y', { left: 158, top: -8, fontSize: 15, fontWeight: 'bold', fill: '#16a34a' });
+                const tx = new fabric.Text('X', { left: -115, top: 85, fontSize: 15, fontWeight: 'bold', fill: '#dc2626' });
+                group = new fabric.Group([zAx, yAx, xAx, tz, ty, tx], { left: center.x - 50, top: center.y - 50 });
+            }
+
+            if (group) {
+                canvas.add(group);
+                canvas.setActiveObject(group);
+                closeModal('math-lib-modal');
+                setTool('select');
+            }
+        }
+
+        // --- #13 Virtual Ruler, Protractor & Compass Logic ---
+        function initRulerTicks() {
+            const container = document.getElementById('ruler-ticks');
+            let html = '';
+            for (let cm = 0; cm <= 12; cm++) {
+                html += `<div class="flex flex-col items-center"><div class="h-3 w-0.5 bg-yellow-800"></div><span>${cm}</span></div>`;
+            }
+            container.innerHTML = html;
+        }
+
+        function toggleInstrument(name) {
+            const map = {
+                ruler: 'virtual-ruler',
+                protractor: 'virtual-protractor',
+                compass: 'virtual-compass'
+            };
+            const el = document.getElementById(map[name]);
+            el.style.display = el.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function rotateInstrument(name, delta) {
+            if (name === 'ruler') {
+                rulerAngle = (rulerAngle + delta) % 360;
+                const el = document.getElementById('virtual-ruler');
+                el.style.transform = `rotate(${rulerAngle}deg)`;
+                document.getElementById('ruler-angle-lbl').innerText = `${rulerAngle}°`;
+            }
+        }
+
+        function drawAlongRuler() {
+            const el = document.getElementById('virtual-ruler');
+            const rect = el.getBoundingClientRect();
+            const cRect = document.getElementById('canvas-container').getBoundingClientRect();
+            const cx = rect.left + rect.width / 2 - cRect.left;
+            const cy = rect.top + rect.height / 2 - cRect.top;
+            const rad = (rulerAngle * Math.PI) / 180;
+            const halfLen = 230;
+            const offsetTop = -35;
+
+            const x1 = cx + (-halfLen * Math.cos(rad) - offsetTop * Math.sin(rad));
+            const y1 = cy + (-halfLen * Math.sin(rad) + offsetTop * Math.cos(rad));
+            const x2 = cx + (halfLen * Math.cos(rad) - offsetTop * Math.sin(rad));
+            const y2 = cy + (halfLen * Math.sin(rad) + offsetTop * Math.cos(rad));
+
+            const line = new fabric.Line([x1, y1, x2, y2], {
+                stroke: currentColor,
+                strokeWidth: currentBrushSize
+            });
+            canvas.add(line);
+            showToast('Segmento recto trazado sobre el borde de la regla');
+        }
+
+        function drawProtractorAngle() {
+            const el = document.getElementById('virtual-protractor');
+            const deg = parseFloat(document.getElementById('protractor-deg').value) || 60;
+            const rect = el.getBoundingClientRect();
+            const cRect = document.getElementById('canvas-container').getBoundingClientRect();
+
+            const ox = rect.left + rect.width / 2 - cRect.left;
+            const oy = rect.bottom - 5 - cRect.top;
+            const len = 140;
+            const rad = (deg * Math.PI) / 180;
+
+            const ray1 = new fabric.Line([ox, oy, ox + len, oy], { stroke: currentColor, strokeWidth: 2.5 });
+            const ray2 = new fabric.Line([ox, oy, ox + len * Math.cos(rad), oy - len * Math.sin(rad)], { stroke: currentColor, strokeWidth: 2.5 });
+            const lbl = new fabric.IText(`${deg}°`, {
+                left: ox + 35, top: oy - 30, fontSize: 16, fontFamily: 'Inter', fontWeight: 'bold', fill: '#2563eb'
+            });
+            const grp = new fabric.Group([ray1, ray2, lbl]);
+            canvas.add(grp);
+            showToast(`Ángulo de ${deg}° construido`);
+        }
+
+        function drawCompassCircle() {
+            const el = document.getElementById('virtual-compass');
+            const r = parseFloat(document.getElementById('compass-radius').value) || 100;
+            const rect = el.getBoundingClientRect();
+            const cRect = document.getElementById('canvas-container').getBoundingClientRect();
+            const cx = rect.left + rect.width / 2 - cRect.left;
+            const cy = rect.top + rect.height / 2 - cRect.top;
+
+            const circle = new fabric.Circle({
+                left: cx, top: cy, radius: r,
+                fill: 'transparent', stroke: currentColor, strokeWidth: currentBrushSize,
+                originX: 'center', originY: 'center'
+            });
+            const centerDot = new fabric.Circle({
+                left: cx, top: cy, radius: 3, fill: '#dc2626',
+                originX: 'center', originY: 'center'
+            });
+            const grp = new fabric.Group([circle, centerDot]);
+            canvas.add(grp);
+            showToast(`Circunferencia de radio ${r}px trazada`);
+        }
+
+        function setupDraggableInstrument(el) {
+            let dragging = false, startX = 0, startY = 0, initLeft = 0, initTop = 0;
+            el.addEventListener('mousedown', (e) => {
+                dragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                initLeft = el.offsetLeft;
+                initTop = el.offsetTop;
+            });
+            window.addEventListener('mousemove', (e) => {
+                if (!dragging) return;
+                el.style.left = (initLeft + e.clientX - startX) + 'px';
+                el.style.top = (initTop + e.clientY - startY) + 'px';
+            });
+            window.addEventListener('mouseup', () => dragging = false);
+        }
+
+        function setupDraggableWidget(el) {
+            setupDraggableInstrument(el);
+        }
+
+        // --- #21 Editable LaTeX Formulas ---
+        function openMathModal() {
+            const active = canvas.getActiveObject();
+            if (active && active.isMath) {
+                editingMathTarget = active;
+                document.getElementById('latex-input').value = active.latex || '';
+            } else {
+                editingMathTarget = null;
+                document.getElementById('latex-input').value = '';
+            }
+            openModal('math-modal');
+        }
+
+        function editSelectedMath(targetObj) {
+            const obj = targetObj || canvas.getActiveObject();
+            if (!obj || !obj.isMath) return;
+            editingMathTarget = obj;
+            document.getElementById('latex-input').value = obj.latex || '';
+            openModal('math-modal');
+        }
+
+        function appendLatex(snippet) {
+            const input = document.getElementById('latex-input');
+            input.value += ' ' + snippet;
+            input.focus();
+        }
+
+        function insertOrUpdateMath() {
+            const latex = document.getElementById('latex-input').value.trim();
+            if (!latex) return;
+
+            MathJax.tex2svgPromise(latex, { display: true }).then(function(node) {
+                const svg = node.querySelector('svg');
+                svg.setAttribute('fill', currentColor);
+                const svgString = new XMLSerializer().serializeToString(svg);
+
+                fabric.loadSVGFromString(svgString, function(objects, options) {
+                    const obj = fabric.util.groupSVGElements(objects, options);
+                    const center = canvas.getVpCenter();
+
+                    let leftPos = center.x;
+                    let topPos = center.y;
+                    let scaleX = 2, scaleY = 2;
+
+                    if (editingMathTarget) {
+                        leftPos = editingMathTarget.left;
+                        topPos = editingMathTarget.top;
+                        scaleX = editingMathTarget.scaleX;
+                        scaleY = editingMathTarget.scaleY;
+                        canvas.remove(editingMathTarget);
+                        editingMathTarget = null;
+                    }
+
+                    obj.set({
+                        left: leftPos,
+                        top: topPos,
+                        originX: 'center',
+                        originY: 'center',
+                        scaleX: scaleX,
+                        scaleY: scaleY,
+                        isMath: true,
+                        latex: latex
+                    });
+
+                    if (obj._objects) {
+                        obj._objects.forEach(p => p.set({ fill: currentColor, stroke: currentColor }));
+                    }
+
+                    canvas.add(obj);
+                    canvas.setActiveObject(obj);
+                    closeModal('math-modal');
+                    saveStateToHistory();
+                });
+            });
+        }
+
+        // --- #1 Multi-Page PDF Import & #26 Image Optimization ---
+        async function loadMultiPagePDF() {
+            const fileInput = document.getElementById('pdf-upload');
+            const file = fileInput.files[0];
+            if (!file) {
+                showToast('Selecciona un archivo PDF primero', 'fa-exclamation-triangle');
+                return;
+            }
+            const lockBg = document.getElementById('pdf-lock-bg').checked;
+            const statusEl = document.getElementById('pdf-loading-status');
+            statusEl.classList.remove('hidden');
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument(new Uint8Array(arrayBuffer)).promise;
+                const totalPages = pdf.numPages;
+
+                saveCurrentPage();
+
+                for (let p = 1; p <= totalPages; p++) {
+                    const page = await pdf.getPage(p);
+                    const viewport = page.getViewport({ scale: 1.6 });
+                    const tempCanvas = document.createElement('canvas');
+                    const ctx = tempCanvas.getContext('2d');
+                    tempCanvas.width = viewport.width;
+                    tempCanvas.height = viewport.height;
+
+                    await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+                    const dataUrl = tempCanvas.toDataURL('image/jpeg', 0.84);
+
+                    if (p === 1 && canvas.getObjects().length === 0) {
+                        await placeImageOnCanvas(dataUrl, lockBg);
+                        pages[currentPageIndex].name = `PDF Pág. 1`;
+                        saveCurrentPage();
+                    } else {
+                        // Create a new page entry
+                        const newIndex = pages.length;
+                        pages.push({ name: `PDF Pág. ${p}`, json: null });
+                        currentPageIndex = newIndex;
+                        canvas.clear();
+                        await placeImageOnCanvas(dataUrl, lockBg);
+                        saveCurrentPage();
+                    }
+                }
+
+                statusEl.classList.add('hidden');
+                closeModal('pdf-modal');
+                loadPage(0);
+                showToast(`${totalPages} páginas importadas del PDF`, 'fa-file-pdf');
+            } catch (err) {
+                statusEl.classList.add('hidden');
+                showToast('Error al procesar el PDF', 'fa-times-circle');
+            }
+        }
+
+        function placeImageOnCanvas(dataUrl, lockIt) {
+            return new Promise((resolve) => {
+                fabric.Image.fromURL(dataUrl, function(img) {
+                    const maxW = canvas.width * 0.85;
+                    const maxH = canvas.height * 0.85;
+                    const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+
+                    img.set({
+                        left: canvas.width / 2,
+                        top: canvas.height / 2,
+                        originX: 'center',
+                        originY: 'center',
+                        scaleX: scale,
+                        scaleY: scale,
+                        locked: lockIt,
+                        lockMovementX: lockIt,
+                        lockMovementY: lockIt,
+                        lockScalingX: lockIt,
+                        lockScalingY: lockIt,
+                        lockRotation: lockIt,
+                        hasControls: !lockIt
+                    });
+                    canvas.add(img);
+                    canvas.sendToBack(img);
+                    canvas.renderAll();
+                    resolve();
+                });
+            });
+        }
+
+        // #26 Automatic Image Optimization (Downscale & Compress large images)
+        function handleOptimizedImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const rawImg = new Image();
+                rawImg.onload = function() {
+                    const MAX_DIM = 1400;
+                    let w = rawImg.width;
+                    let h = rawImg.height;
+                    if (w > MAX_DIM || h > MAX_DIM) {
+                        if (w > h) { h = Math.round(h * (MAX_DIM / w)); w = MAX_DIM; }
+                        else { w = Math.round(w * (MAX_DIM / h)); h = MAX_DIM; }
+                    }
+                    const offCanvas = document.createElement('canvas');
+                    offCanvas.width = w;
+                    offCanvas.height = h;
+                    offCanvas.getContext('2d').drawImage(rawImg, 0, 0, w, h);
+                    const optimizedUrl = offCanvas.toDataURL('image/jpeg', 0.82);
+
+                    placeImageOnCanvas(optimizedUrl, false).then(() => {
+                        showToast('Imagen optimizada e insertada', 'fa-image');
+                    });
+                };
+                rawImg.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+            event.target.value = '';
+        }
+
+        // --- #8 Page Management (Duplicate, Delete, Rename, Drag Reorder) ---
+        function updatePageIndicator() {
+            const text = `${currentPageIndex + 1} / ${pages.length}`;
+            document.getElementById('page-indicator').innerText = text;
+            document.getElementById('pres-page-indicator').innerText = text;
+        }
+
+        function saveCurrentPage() {
+            pages[currentPageIndex].json = JSON.stringify(canvas.toJSON(EXTRA_PROPS));
+            updatePageIndicator();
+        }
+
+        function loadPage(index) {
+            if (index < 0 || index >= pages.length) return;
+            saveCurrentPage();
+            currentPageIndex = index;
+            isHistoryLocked = true;
+            canvas.loadFromJSON(pages[currentPageIndex].json || '{"objects":[]}', function() {
+                reapplyLocksAndConnections();
+                canvas.renderAll();
+                undoStack = [pages[currentPageIndex].json];
+                redoStack = [];
+                isHistoryLocked = false;
+                updatePageIndicator();
+            });
+        }
+
+        function addPage() {
+            saveCurrentPage();
+            pages.push({ name: `Página ${pages.length + 1}`, json: null });
+            currentPageIndex = pages.length - 1;
+            canvas.clear();
+            saveCurrentPage();
+            undoStack = [pages[currentPageIndex].json];
+            redoStack = [];
+            updatePageIndicator();
+        }
+
+        function prevPage() { if (currentPageIndex > 0) loadPage(currentPageIndex - 1); }
+        function nextPage() { if (currentPageIndex < pages.length - 1) loadPage(currentPageIndex + 1); }
+
+        function openPageManager() {
+            saveCurrentPage();
+            renderPageManagerList();
+            openModal('pages-modal');
+        }
+
+        function renderPageManagerList() {
+            const container = document.getElementById('pages-list-container');
+            container.innerHTML = '';
+
+            pages.forEach((p, idx) => {
+                const row = document.createElement('div');
+                row.className = `flex items-center justify-between gap-2 p-2.5 rounded-xl border ${idx === currentPageIndex ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700'}`;
+                row.draggable = true;
+
+                row.ondragstart = (e) => e.dataTransfer.setData('text/plain', idx);
+                row.ondragover = (e) => e.preventDefault();
+                row.ondrop = (e) => {
+                    e.preventDefault();
+                    const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+                    reorderPages(fromIdx, idx);
+                };
+
+                row.innerHTML = `
+                    <div class="flex items-center gap-2 flex-1">
+                        <i class="fas fa-grip-vertical text-slate-400 cursor-grab"></i>
+                        <span class="text-xs font-bold text-slate-400 w-6">#${idx + 1}</span>
+                        <input type="text" value="${p.name}" onchange="renamePage(${idx}, this.value)" class="bg-transparent border-b border-transparent focus:border-blue-500 outline-none text-xs font-semibold flex-1 px-1 py-0.5">
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <button onclick="loadPage(${idx}); closeModal('pages-modal')" class="action-btn py-1 px-2 text-xs" title="Ir a página"><i class="fas fa-eye"></i></button>
+                        <button onclick="duplicatePage(${idx})" class="action-btn py-1 px-2 text-xs" title="Duplicar"><i class="fas fa-copy"></i></button>
+                        <button onclick="deletePage(${idx})" class="action-btn danger py-1 px-2 text-xs" title="Eliminar"><i class="fas fa-trash"></i></button>
+                    </div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        function renamePage(idx, newName) {
+            pages[idx].name = newName || `Página ${idx + 1}`;
+        }
+
+        function duplicatePage(idx) {
+            const copy = { name: pages[idx].name + ' (Copia)', json: pages[idx].json };
+            pages.splice(idx + 1, 0, copy);
+            renderPageManagerList();
+            updatePageIndicator();
+        }
+
+        function deletePage(idx) {
+            if (pages.length <= 1) {
+                showToast('Debe existir al menos una página', 'fa-exclamation-circle');
+                return;
+            }
+            pages.splice(idx, 1);
+            if (currentPageIndex >= pages.length) currentPageIndex = pages.length - 1;
+            loadPage(currentPageIndex);
+            renderPageManagerList();
+        }
+
+        function reorderPages(fromIdx, toIdx) {
+            if (fromIdx === toIdx) return;
+            const moved = pages.splice(fromIdx, 1)[0];
+            pages.splice(toIdx, 0, moved);
+            currentPageIndex = toIdx;
+            loadPage(currentPageIndex);
+            renderPageManagerList();
+        }
+
+        // --- #11 Curtain (Vertical & Horizontal Drag) ---
+        function toggleCurtain() {
+            const curtain = document.getElementById('curtain');
+            if (curtain.style.display === 'block') {
+                curtain.style.display = 'none';
+            } else {
+                curtain.style.display = 'block';
+                curtain.style.height = '65%';
+                curtain.style.width = '100%';
+            }
+        }
+
+        function setupCurtain() {
+            const curtain = document.getElementById('curtain');
+            const handleY = document.getElementById('curtain-drag-y');
+            const handleX = document.getElementById('curtain-drag-x');
+            let dragY = false, dragX = false;
+
+            handleY.addEventListener('mousedown', (e) => { e.stopPropagation(); dragY = true; });
+            handleX.addEventListener('mousedown', (e) => { e.stopPropagation(); dragX = true; });
+
+            window.addEventListener('mousemove', (e) => {
+                if (dragY) curtain.style.height = Math.max(40, Math.min(window.innerHeight, e.clientY)) + 'px';
+                if (dragX) curtain.style.width = Math.max(80, Math.min(window.innerWidth, e.clientX)) + 'px';
+            });
+
+            window.addEventListener('mouseup', () => { dragY = false; dragX = false; });
+        }
+
+        // --- #12 Visible Timer with Pause & Audio Alert ---
+        function startTimer() {
+            const mins = parseInt(document.getElementById('timer-mins').value) || 0;
+            const secs = parseInt(document.getElementById('timer-secs').value) || 0;
+            timeRemaining = mins * 60 + secs;
+            if (timeRemaining <= 0) return;
+
+            isTimerPaused = false;
+            closeModal('timer-modal');
+            const widget = document.getElementById('timer-widget');
+            widget.style.display = 'flex';
+            const display = document.getElementById('timer-display');
+            display.className = '';
+
+            clearInterval(timerInterval);
+            updateTimerDisplay();
+
+            timerInterval = setInterval(() => {
+                if (isTimerPaused) return;
+                timeRemaining--;
+                updateTimerDisplay();
+
+                if (timeRemaining <= 60 && timeRemaining > 10) display.className = 'timer-warning';
+                else if (timeRemaining <= 10) display.className = 'timer-danger';
+
+                if (timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    playTimerAlarm();
+                    showToast('¡Tiempo terminado!', 'fa-bell');
+                }
+            }, 1000);
+        }
+
+        function pauseResumeTimer() {
+            isTimerPaused = !isTimerPaused;
+            const btn = document.getElementById('timer-pause-btn');
+            btn.innerHTML = isTimerPaused ? '<i class="fas fa-play"></i>' : '<i class="fas fa-pause"></i>';
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+            document.getElementById('timer-widget').style.display = 'none';
+            closeModal('timer-modal');
+        }
+
+        function updateTimerDisplay() {
+            const m = Math.floor(timeRemaining / 60).toString().padStart(2, '0');
+            const s = (timeRemaining % 60).toString().padStart(2, '0');
+            document.getElementById('timer-display').innerText = `${m}:${s}`;
+        }
+
+        function playTimerAlarm() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                [523.25, 659.25, 783.99].forEach((freq, idx) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.frequency.value = freq;
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(ctx.currentTime + idx * 0.18);
+                    osc.stop(ctx.currentTime + idx * 0.18 + 0.15);
+                });
+            } catch (e) {}
+        }
+
+        // --- #10 Presentation Mode & Theme Switch ---
+        function togglePresentation() {
+            isPresentationMode = !isPresentationMode;
+            document.body.classList.toggle('presentation-mode', isPresentationMode);
+            if (isPresentationMode && document.documentElement.requestFullscreen) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            } else if (!isPresentationMode && document.fullscreenElement) {
+                document.exitFullscreen().catch(() => {});
+            }
+        }
+
+        function toggleBoardTheme() {
+            isDarkBoard = !isDarkBoard;
+            document.body.classList.toggle('dark-board', isDarkBoard);
+            document.getElementById('theme-btn').innerHTML = isDarkBoard
+                ? '<i class="fas fa-sun text-amber-400"></i>'
+                : '<i class="fas fa-moon"></i>';
+            if (isDarkBoard && currentColor === '#0f172a') {
+                setColor('#ffffff', null);
+            } else if (!isDarkBoard && currentColor === '#ffffff') {
+                setColor('#0f172a', null);
+            }
+        }
+
+        function confirmClearCanvas() {
+            const lockedObjs = canvas.getObjects().filter(o => o.locked);
+            canvas.clear();
+            lockedObjs.forEach(o => canvas.add(o));
+            canvas.renderAll();
+            saveStateToHistory();
+            closeModal('clear-modal');
+            showToast('Página limpiada (los elementos fijados se conservaron)');
+        }
+
+        // --- #23, #24, #25 Export PDF, Range, PNG & Vector SVG ---
+        function parsePageRange(rangeStr, maxPages) {
+            const indices = new Set();
+            const parts = rangeStr.split(',');
+            parts.forEach(part => {
+                const p = part.trim();
+                if (p.includes('-')) {
+                    const [start, end] = p.split('-').map(n => parseInt(n));
+                    if (!isNaN(start) && !isNaN(end)) {
+                        for (let i = Math.max(1, start); i <= Math.min(maxPages, end); i++) indices.add(i - 1);
+                    }
+                } else {
+                    const num = parseInt(p);
+                    if (!isNaN(num) && num >= 1 && num <= maxPages) indices.add(num - 1);
+                }
+            });
+            return Array.from(indices).sort((a, b) => a - b);
+        }
+
+        async function exportBoardToPDF() {
+            saveCurrentPage();
+            const rangeType = document.querySelector('input[name="pdf-range-type"]:checked').value;
+            let pageIndices = [];
+
+            if (rangeType === 'all') {
+                pageIndices = pages.map((_, i) => i);
+            } else if (rangeType === 'current') {
+                pageIndices = [currentPageIndex];
+            } else {
+                const raw = document.getElementById('pdf-custom-range').value || '1';
+                pageIndices = parsePageRange(raw, pages.length);
+                if (pageIndices.length === 0) pageIndices = [currentPageIndex];
+            }
+
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({
+                orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+                unit: 'px',
+                format: [canvas.width, canvas.height]
+            });
+
+            const originalPageIdx = currentPageIndex;
+            const bgColor = isDarkBoard ? '#12121e' : '#ffffff';
+
+            for (let i = 0; i < pageIndices.length; i++) {
+                const idx = pageIndices[i];
+                if (i > 0) pdf.addPage([canvas.width, canvas.height]);
+
+                await new Promise(resolve => {
+                    canvas.loadFromJSON(pages[idx].json || '{"objects":[]}', () => {
+                        canvas.backgroundColor = bgColor;
+                        canvas.renderAll();
+                        // Multiplier 2 preserves sharp lines and mathematical formulas
+                        const imgData = canvas.toDataURL({ format: 'png', multiplier: 2 });
+                        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+                        resolve();
+                    });
+                });
+            }
+
+            canvas.backgroundColor = null;
+            loadPage(originalPageIdx);
+            pdf.save('TuProfe20_Clase.pdf');
+            closeModal('export-modal');
+            showToast('PDF exportado con alta nitidez');
+        }
+
+        function exportCurrentPagePNG() {
+            const bgColor = isDarkBoard ? '#12121e' : '#ffffff';
+            canvas.backgroundColor = bgColor;
+            canvas.renderAll();
+            const dataUrl = canvas.toDataURL({ format: 'png', multiplier: 2 });
+            canvas.backgroundColor = null;
+            canvas.renderAll();
+            downloadDataUrl(dataUrl, `Pizarra_Pagina_${currentPageIndex + 1}.png`);
+            closeModal('export-modal');
+        }
+
+        function exportSelectedObjectPNG() {
+            const active = canvas.getActiveObject();
+            if (!active) {
+                showToast('Selecciona primero una figura o grupo en la pizarra', 'fa-crop-simple');
+                return;
+            }
+            const dataUrl = active.toDataURL({ format: 'png', multiplier: 2 });
+            downloadDataUrl(dataUrl, 'Figura_Seleccionada.png');
+            closeModal('export-modal');
+        }
+
+        function exportVectorSVG() {
+            const svgStr = canvas.toSVG();
+            const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            downloadDataUrl(url, `Pizarra_Vectorial_Pag_${currentPageIndex + 1}.svg`);
+            closeModal('export-modal');
+        }
+
+        function downloadDataUrl(url, filename) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+
+        // --- #9 Keyboard Shortcuts ---
+        document.addEventListener('keydown', (e) => {
+            const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+            const activeObj = canvas ? canvas.getActiveObject() : null;
+            if (activeTag === 'input' || activeTag === 'textarea' || (activeObj && activeObj.isEditing)) {
+                return;
+            }
+
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                undo();
+            } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+                e.preventDefault();
+                redo();
+            } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (activeObj && !activeObj.locked) {
+                    canvas.remove(activeObj);
+                    canvas.discardActiveObject();
+                }
+            } else if (e.key === 'Escape' && isPresentationMode) {
+                togglePresentation();
+            } else if (!e.ctrlKey && !e.metaKey) {
+                const k = e.key.toLowerCase();
+                if (k === 'v') setTool('select');
+                else if (k === 'p') setTool('draw');
+                else if (k === 'm') setTool('highlighter');
+                else if (k === 'e') setTool('erase-obj');
+                else if (k === 'h') setTool('pan');
+                else if (k === 'l') setTool('laser');
+                else if (k === 't') setTool('text');
+            }
+        });
+    </script>
+</body>
+</html>
