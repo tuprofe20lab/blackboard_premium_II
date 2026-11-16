@@ -401,8 +401,8 @@
                 <span>Grosor: <span id="brush-val" class="text-blue-600">4</span>px</span>
             </div>
             <input type="range" id="brush-size" min="1" max="40" value="4" class="w-full cursor-pointer accent-blue-600" oninput="setBrushSize(this.value)">
-            <div class="flex justify-between items-center text-[11px] text-slate-400 font-bold mt-3 mb-1 uppercase tracking-wider"><span>Suavidad del lápiz</span><span id="pen-smooth-val" class="text-blue-600">55%</span></div>
-            <input type="range" id="pen-smooth" min="0" max="100" value="55" step="5" class="w-full cursor-pointer accent-blue-600" oninput="setPenSmoothness(this.value)" aria-label="Suavidad del lápiz">
+            <div class="flex justify-between items-center text-[11px] text-slate-400 font-bold mt-3 mb-1 uppercase tracking-wider"><span>Suavidad del lápiz</span><span id="pen-smooth-val" class="text-blue-600">100%</span></div>
+            <input type="range" id="pen-smooth" min="0" max="100" value="100" step="5" class="w-full cursor-pointer accent-blue-600" oninput="setPenSmoothness(this.value)" aria-label="Suavidad del lápiz" title="100% conserva todos los puntos del trazo, sin simplificar curvas">
             
             <label class="flex items-center gap-2 text-xs mt-2 cursor-pointer text-slate-600 dark:text-slate-300" title="Aprovechar presión de tableta gráfica y rechazar palma">
                 <input type="checkbox" id="stylus-only-toggle" class="rounded accent-blue-600" onchange="toggleStylusMode(this.checked)">
@@ -840,7 +840,7 @@
         let currentTool = 'select';
         let currentColor = '#0f172a'; // Dark slate default for white board
         let currentBrushSize = 4;
-        let penSmoothness = 55; // 0: detalle máximo; 100: trazo más depurado
+        let penSmoothness = 100; // 100: conservar todos los puntos y la curva continua
         let currentDashArray = null;
         let eraserMode = 'object'; // 'object' | 'zone'
         let isPresentationMode = false;
@@ -1197,10 +1197,11 @@
 
         function updateBrushConfig() {
             if (!canvas) return;
-            // El pincel de Fabric dibuja curvas cuadráticas; decimate elimina
-            // vibraciones de puntos sin imponer retardo al lápiz o tableta.
+            // Evitar el recorte agresivo de puntos: convertía curvas pequeñas
+            // y escritura rápida en segmentos rígidos y entrecortados.
+            // Fabric traza curvas cuadráticas suaves entre los puntos originales.
             const brush = new fabric.PencilBrush(canvas);
-            brush.decimate = 0.15 + (penSmoothness / 100) * 1.15;
+            brush.decimate = (1 - penSmoothness / 100) * 0.25;
             brush.strokeLineCap = 'round';
             brush.strokeLineJoin = 'round';
             brush.strokeMiterLimit = 2;
