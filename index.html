@@ -401,8 +401,8 @@
                 <span>Grosor: <span id="brush-val" class="text-blue-600">4</span>px</span>
             </div>
             <input type="range" id="brush-size" min="1" max="40" value="4" class="w-full cursor-pointer accent-blue-600" oninput="setBrushSize(this.value)">
-            <div class="flex justify-between items-center text-[11px] text-slate-400 font-bold mt-3 mb-1 uppercase tracking-wider"><span>Suavidad del lápiz</span><span id="pen-smooth-val" class="text-blue-600">100%</span></div>
-            <input type="range" id="pen-smooth" min="0" max="100" value="100" step="5" class="w-full cursor-pointer accent-blue-600" oninput="setPenSmoothness(this.value)" aria-label="Suavidad del lápiz" title="100% conserva todos los puntos del trazo, sin simplificar curvas">
+            <div class="flex justify-between items-center text-[11px] text-slate-400 font-bold mt-3 mb-1 uppercase tracking-wider"><span>Suavidad del lápiz</span><span id="pen-smooth-val" class="text-blue-600">85%</span></div>
+            <input type="range" id="pen-smooth" min="0" max="100" value="85" step="5" class="w-full cursor-pointer accent-blue-600" oninput="setPenSmoothness(this.value)" aria-label="Suavidad del lápiz" title="Ajusta la estabilización del lápiz: 0% inmediato, 85% suave, 100% máxima estabilidad">
             
             <label class="flex items-center gap-2 text-xs mt-2 cursor-pointer text-slate-600 dark:text-slate-300" title="Aprovechar presión de tableta gráfica y rechazar palma">
                 <input type="checkbox" id="stylus-only-toggle" class="rounded accent-blue-600" onchange="toggleStylusMode(this.checked)">
@@ -840,7 +840,7 @@
         let currentTool = 'select';
         let currentColor = '#0f172a'; // Dark slate default for white board
         let currentBrushSize = 4;
-        let penSmoothness = 100; // 100: conservar todos los puntos y la curva continua
+        let penSmoothness = 85; // Estabilización suave de fábrica; 0% sin filtro, 100% máxima
         let currentDashArray = null;
         let eraserMode = 'object'; // 'object' | 'zone'
         let isPresentationMode = false;
@@ -1197,11 +1197,41 @@
 
         function updateBrushConfig() {
             if (!canvas) return;
-            // Evitar el recorte agresivo de puntos: convertía curvas pequeñas
-            // y escritura rápida en segmentos rígidos y entrecortados.
-            // Fabric traza curvas cuadráticas suaves entre los puntos originales.
+            // Estabilización adaptativa del lápiz: filtrar microtemblores sin
+            // simplificar excesivamente letras, círculos pequeños o giros.
+            // Mantener PencilBrush de Fabric conserva paths, borrador, PDF,
+            // historial y exportaciones sin cambiar su representación.
             const brush = new fabric.PencilBrush(canvas);
-            brush.decimate = (1 - penSmoothness / 100) * 0.25;
+            brush.decimate = 0; // Ningún punto útil se descarta al terminar.
+            if (currentTool === 'draw') {
+                const baseAddPoint = brush._addPoint;
+                let lastFilteredPoint = null;
+                brush._addPoint = function(point) {
+                    // Fabric reinicia _points al comenzar cada trazo.
+                    if (!this._points || this._points.length === 0) {
+                        lastFilteredPoint = null;
+                    }
+                    if (penSmoothness <= 0 || !lastFilteredPoint) {
+                        lastFilteredPoint = new fabric.Point(point.x, point.y);
+                        return baseAddPoint.call(this, point);
+                    }
+                    const dx = point.x - lastFilteredPoint.x;
+                    const dy = point.y - lastFilteredPoint.y;
+                    const distance = Math.hypot(dx, dy);
+                    // A mayor velocidad, mayor respuesta; a menor velocidad,
+                    // se absorbe el jitter típico de mouse y tableta.
+                    const strength = penSmoothness / 100;
+                    const response = Math.min(1,
+                        (1 - 0.50 * strength) + Math.min(distance / 22, 1) * 0.43 * strength
+                    );
+                    const filtered = new fabric.Point(
+                        lastFilteredPoint.x + dx * response,
+                        lastFilteredPoint.y + dy * response
+                    );
+                    lastFilteredPoint = filtered;
+                    return baseAddPoint.call(this, filtered);
+                };
+            }
             brush.strokeLineCap = 'round';
             brush.strokeLineJoin = 'round';
             brush.strokeMiterLimit = 2;
