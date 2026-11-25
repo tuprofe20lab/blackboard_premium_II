@@ -264,6 +264,8 @@
         </button>
         <input type="file" id="img-upload" accept="image/*" class="hidden" onchange="handleOptimizedImageUpload(event)">
 
+        <button class="action-btn" id="dual-pen-btn" onclick="toggleDualPen()" title="Permitir dos alumnos escribiendo simultáneamente en pantalla multitáctil"><i class="fas fa-hand-pointer text-blue-600"></i> Dos alumnos: OFF</button>
+
         <!-- Formula LaTeX (#21) -->
         <button class="action-btn" onclick="openMathModal()" title="Insertar o Editar Ecuación LaTeX">
             <i class="fas fa-square-root-variable text-purple-600"></i> Fórmula
@@ -935,6 +937,7 @@
             fabric.Object.prototype.cornerSize = 9;
 
             updateBrushConfig();
+            installDualPenHandlers();
 
             //Assign IDs & Save Undo History
             canvas.on('object:added', (e) => {
@@ -1153,6 +1156,91 @@
                     });
                 }
             });
+        }
+
+
+        // Escritura multitáctil independiente: Fabric.js solo gestiona un lápiz a la vez.
+        // Capturamos eventos Pointer antes de Fabric, únicamente con el modo activado.
+        let dualPenEnabled = false;
+        const dualPointers = new Map();
+        function toggleDualPen() {
+            dualPenEnabled = !dualPenEnabled;
+            dualPointers.clear();
+            const btn = document.getElementById('dual-pen-btn');
+            btn.innerHTML = '<i class="fas fa-hand-pointer text-blue-600"></i> Dos alumnos: ' + (dualPenEnabled ? 'ON' : 'OFF');
+            btn.classList.toggle('primary', dualPenEnabled);
+            if (dualPenEnabled) setTool('draw');
+            showToast(dualPenEnabled ? 'Modo dos alumnos activo: pantalla multitáctil' : 'Modo dos alumnos desactivado', 'fa-hand-pointer');
+        }
+        function installDualPenHandlers() {
+            const surface = canvas.upperCanvasEl;
+            surface.style.touchAction = 'none';
+            const drawingTools = () => currentTool === 'draw' || currentTool === 'highlighter';
+            const isDualInput = e => dualPenEnabled && drawingTools() && (e.pointerType === 'touch' || e.pointerType === 'pen') && !stylusOnlyMode;
+            function coordinates(e) {
+                const bounds = surface.getBoundingClientRect();
+                const x = (e.clientX - bounds.left) * surface.width / bounds.width;
+                const y = (e.clientY - bounds.top) * surface.height / bounds.height;
+                const inv = fabric.util.invertTransform(canvas.viewportTransform);
+                return fabric.util.transformPoint(new fabric.Point(x, y), inv);
+            }
+            function finalize(id) {
+                const stroke = dualPointers.get(id);
+                if (!stroke) return;
+                dualPointers.delete(id);
+                if (stroke.points.length < 2) { canvas.remove(stroke.preview); return; }
+                const pts = stroke.points;
+                let d = 'M ' + pts[0].x + ' ' + pts[0].y;
+                for (let i = 1; i < pts.length - 1; i++) {
+                    const midX = (pts[i].x + pts[i+1].x)/2;
+                    const midY = (pts[i].y + pts[i+1].y)/2;
+                    d += ' Q ' + pts[i].x + ' ' + pts[i].y + ' ' + midX + ' ' + midY;
+                }
+                const last = pts[pts.length-1];
+                d += ' L ' + last.x + ' ' + last.y;
+                canvas.remove(stroke.preview);
+                const path = new fabric.Path(d, {
+                    fill: '', stroke: stroke.color, strokeWidth: stroke.width,
+                    strokeLineCap: 'round', strokeLineJoin: 'round',
+                    selectable: true, evented: true, objectCaching: false
+                });
+                canvas.add(path);
+                canvas.requestRenderAll();
+            }
+            surface.addEventListener('pointerdown', e => {
+                if (!isDualInput(e)) return;
+                e.preventDefault(); e.stopImmediatePropagation();
+                if (dualPointers.size >= 2) return;
+                const pt = coordinates(e);
+                const color = currentColor;
+                const width = currentBrushSize;
+                const preview = new fabric.Polyline([{x:pt.x,y:pt.y}], {
+                    fill:'', stroke:color, strokeWidth:width, strokeLineCap:'round',
+                    strokeLineJoin:'round', selectable:false, evented:false, objectCaching:false
+                });
+                canvas.add(preview);
+                dualPointers.set(e.pointerId, {points:[pt],preview,color,width});
+                try { surface.setPointerCapture(e.pointerId); } catch (_) {}
+            }, true);
+            surface.addEventListener('pointermove', e => {
+                const stroke = dualPointers.get(e.pointerId);
+                if (!stroke) return;
+                e.preventDefault(); e.stopImmediatePropagation();
+                const pt = coordinates(e);
+                const last = stroke.points[stroke.points.length-1];
+                if (Math.hypot(pt.x-last.x,pt.y-last.y) < 1.2) return;
+                stroke.points.push(pt);
+                stroke.preview.set({points:stroke.points.slice()});
+                stroke.preview.setCoords();
+                canvas.requestRenderAll();
+            }, true);
+            for (const eventName of ['pointerup','pointercancel','lostpointercapture']) {
+                surface.addEventListener(eventName, e => {
+                    if (!dualPointers.has(e.pointerId)) return;
+                    e.preventDefault(); e.stopImmediatePropagation();
+                    finalize(e.pointerId);
+                }, true);
+            }
         }
 
         // --- Tools & Shortcuts (#9) ---
@@ -2139,7 +2227,7 @@
                     offCanvas.getContext('2d').drawImage(rawImg, 0, 0, w, h);
                     const optimizedUrl = offCanvas.toDataURL('image/jpeg', 0.82);
 
-                    placeImageOnCanvas(optimizedUrl, false).then(() => {
+                    placeImageOnCanvas(optimizedUrl, true).then(() => {
                         showToast('Imagen optimizada e insertada', 'fa-image');
                     });
                 };
