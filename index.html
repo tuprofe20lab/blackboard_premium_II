@@ -1301,7 +1301,7 @@
             if (distance(pts[0],pts[pts.length-1]) > Math.max(15,diag*0.16)) return false;
             let traveled = 0;
             for (let i=1;i<pts.length;i++) traveled += distance(pts[i-1],pts[i]);
-            if (traveled < 1.75*(w+h) || traveled > 4.0*(w+h)) return false;
+            if (traveled < 1.18*(w+h) || traveled > 4.0*(w+h)) return false;
             const clean = pts.filter((p,i) => i===0 || distance(p,pts[i-1])>0.8);
             if (clean.length < 8) return false;
 
