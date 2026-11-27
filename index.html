@@ -264,8 +264,7 @@
         </button>
         <input type="file" id="img-upload" accept="image/*" class="hidden" onchange="handleOptimizedImageUpload(event)">
 
-        <button class="action-btn" id="dual-pen-btn" onclick="toggleDualPen()" title="Dos lápices independientes simultáneos en pantalla multitáctil"><i class="fas fa-hand-pointer text-blue-600"></i> Dos alumnos: OFF</button>
-        <button class="action-btn" id="smart-shapes-btn" onclick="toggleSmartShapes()" title="Corregir automáticamente trazos cerrados a círculos, elipses, triángulos y otros polígonos"><i class="far fa-circle text-purple-600"></i> Figuras exactas: OFF</button>
+        <button class="action-btn" id="dual-pen-btn" onclick="toggleDualPen()" title="Permitir dos alumnos escribiendo simultáneamente en pantalla multitáctil"><i class="fas fa-hand-pointer text-blue-600"></i> Dos alumnos: OFF</button>
 
         <!-- Formula LaTeX (#21) -->
         <button class="action-btn" onclick="openMathModal()" title="Insertar o Editar Ecuación LaTeX">
@@ -939,12 +938,6 @@
 
             updateBrushConfig();
             installDualPenHandlers();
-            canvas.on('path:created', (event) => {
-                if (smartShapesEnabled && currentTool === 'draw' && event.path) {
-                    // Fabric emits path:created after committing the pencil stroke.
-                    requestAnimationFrame(() => recognizeFabricStroke(event.path));
-                }
-            });
 
             //Assign IDs & Save Undo History
             canvas.on('object:added', (e) => {
@@ -1169,15 +1162,6 @@
         // Escritura multitáctil independiente: Fabric.js solo gestiona un lápiz a la vez.
         // Capturamos eventos Pointer antes de Fabric, únicamente con el modo activado.
         let dualPenEnabled = false;
-        let smartShapesEnabled = false;
-        function toggleSmartShapes() {
-            smartShapesEnabled = !smartShapesEnabled;
-            const btn = document.getElementById('smart-shapes-btn');
-            btn.classList.toggle('primary', smartShapesEnabled);
-            btn.innerHTML = '<i class="far fa-circle text-purple-600"></i> Figuras exactas: ' + (smartShapesEnabled ? 'ON' : 'OFF');
-            if (smartShapesEnabled) setTool('draw');
-            showToast(smartShapesEnabled ? 'Dibuja una figura cerrada: se ajustará automáticamente' : 'Reconocimiento de figuras desactivado');
-        }
         const dualPointers = new Map();
         function toggleDualPen() {
             dualPenEnabled = !dualPenEnabled;
@@ -1215,7 +1199,6 @@
                 const last = pts[pts.length-1];
                 d += ' L ' + last.x + ' ' + last.y;
                 canvas.remove(stroke.preview);
-                if (smartShapesEnabled && recognizeSmartShape(pts, stroke.color, stroke.width)) return;
                 const path = new fabric.Path(d, {
                     fill: '', stroke: stroke.color, strokeWidth: stroke.width,
                     strokeLineCap: 'round', strokeLineJoin: 'round',
@@ -1260,127 +1243,6 @@
             }
         }
 
-
-        // Reconocimiento geométrico de trazos cerrados (lápiz y multitáctil).
-        // Se conserva la escritura normal si el trazo no pasa los filtros.
-        function recognizeFabricStroke(path) {
-            if (!smartShapesEnabled || !canvas.getObjects().includes(path)) return;
-            const pts = [];
-            for (const segment of path.path || []) {
-                const op = segment[0];
-                // Q: endpoint in positions 3,4; C: endpoint 5,6; L/M: 1,2.
-                let x, y;
-                if (op === 'Q') { x = segment[3]; y = segment[4]; }
-                else if (op === 'C') { x = segment[5]; y = segment[6]; }
-                else if (op === 'L' || op === 'M') { x = segment[1]; y = segment[2]; }
-                if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-                const p = fabric.util.transformPoint(
-                    new fabric.Point(x - path.pathOffset.x, y - path.pathOffset.y),
-                    path.calcTransformMatrix()
-                );
-                pts.push({x:p.x, y:p.y});
-            }
-            if (pts.length < 8) return;
-            const bounds = path.getBoundingRect(true, true);
-            const strokeColor = path.stroke || currentColor;
-            const strokeWidth = (path.strokeWidth || currentBrushSize) * (path.scaleX || 1);
-            recognizeSmartShape(pts, strokeColor, strokeWidth, path);
-        }
-
-        function recognizeSmartShape(raw, color, width, oldPath = null) {
-            if (!Array.isArray(raw) || raw.length < 8) return false;
-            const pts = raw.filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
-            if (pts.length < 8) return false;
-            const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
-            const minX = Math.min(...xs), maxX = Math.max(...xs);
-            const minY = Math.min(...ys), maxY = Math.max(...ys);
-            const w = maxX - minX, h = maxY - minY, diag = Math.hypot(w,h);
-            if (w < 18 || h < 18 || diag < 32) return false;
-            const distance = (a,b) => Math.hypot(a.x-b.x,a.y-b.y);
-            // An almost complete closed outline is required: no recognition for handwriting.
-            if (distance(pts[0],pts[pts.length-1]) > Math.max(15,diag*0.16)) return false;
-            let traveled = 0;
-            for (let i=1;i<pts.length;i++) traveled += distance(pts[i-1],pts[i]);
-            if (traveled < 1.18*(w+h) || traveled > 4.0*(w+h)) return false;
-            const clean = pts.filter((p,i) => i===0 || distance(p,pts[i-1])>0.8);
-            if (clean.length < 8) return false;
-
-            // Circle/ellipse fit: scaled radial deviation of the drawn contour.
-            const cx = (minX+maxX)/2, cy = (minY+maxY)/2;
-            const radii = clean.map(p => Math.hypot((p.x-cx)/(w/2),(p.y-cy)/(h/2)));
-            const mean = radii.reduce((a,b)=>a+b,0)/radii.length;
-            const deviation = Math.sqrt(radii.reduce((a,v)=>a+(v-mean)**2,0)/radii.length);
-            let shape = null, kind = '';
-            if (Math.abs(mean-1) < 0.20 && deviation < 0.105 &&
-                traveled > 2.1*(w+h)/2 && traveled < 3.5*(w+h)/2) {
-                if (Math.abs(w-h)/Math.max(w,h) < 0.11) {
-                    const diameter=(w+h)/2;
-                    shape = new fabric.Circle({left:cx-diameter/2,top:cy-diameter/2,radius:diameter/2,
-                        stroke:color,strokeWidth:width,fill:'transparent',strokeUniform:true});
-                    kind='Círculo';
-                } else {
-                    shape = new fabric.Ellipse({left:minX,top:minY,rx:w/2,ry:h/2,
-                        stroke:color,strokeWidth:width,fill:'transparent',strokeUniform:true});
-                    kind='Elipse';
-                }
-            }
-            if (!shape) {
-                // Closed-contour Ramer–Douglas–Peucker reduction for straight polygons.
-                // Splitting the ring at its most distant points avoids arbitrary start position.
-                const first = clean[0];
-                let opposite = 1;
-                for (let i=2;i<clean.length;i++) if (distance(clean[i],first)>distance(clean[opposite],first)) opposite=i;
-                const chainA=clean.slice(0,opposite+1),chainB=clean.slice(opposite).concat([first]);
-                function pointToSegment(p,a,b) {
-                    const dx=b.x-a.x,dy=b.y-a.y, len=dx*dx+dy*dy;
-                    if (!len) return distance(p,a);
-                    const t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/len));
-                    return Math.hypot(p.x-(a.x+t*dx),p.y-(a.y+t*dy));
-                }
-                function reduce(points,eps) {
-                    if (points.length<=2) return points;
-                    let max=0,index=-1;
-                    for(let i=1;i<points.length-1;i++){
-                        const d=pointToSegment(points[i],points[0],points[points.length-1]);
-                        if(d>max){max=d;index=i;}
-                    }
-                    if(max<=eps)return [points[0],points[points.length-1]];
-                    return reduce(points.slice(0,index+1),eps).slice(0,-1).concat(reduce(points.slice(index),eps));
-                }
-                const vertices=reduce(chainA,diag*0.055).slice(0,-1)
-                    .concat(reduce(chainB,diag*0.055).slice(0,-1));
-                // Merge adjacent near-duplicate vertices.
-                const unique=[];
-                for(const p of vertices) if(!unique.length||distance(p,unique[unique.length-1])>diag*0.10) unique.push(p);
-                if(unique.length>2 && distance(unique[0],unique[unique.length-1])<diag*0.10) unique.pop();
-                if(unique.length>=3 && unique.length<=8) {
-                    const errors=clean.map(p=>Math.min(...unique.map((v,i)=>pointToSegment(p,v,unique[(i+1)%unique.length]))));
-                    const rms=Math.sqrt(errors.reduce((a,v)=>a+v*v,0)/errors.length);
-                    const minSide=Math.min(...unique.map((v,i)=>distance(v,unique[(i+1)%unique.length])));
-                    if(rms<diag*0.042 && minSide>diag*0.16){
-                        shape=new fabric.Polygon(unique.map(v=>({x:v.x,y:v.y})),{
-                            stroke:color,strokeWidth:width,fill:'transparent',strokeUniform:true,
-                            strokeLineJoin:'round',objectCaching:false
-                        });
-                        kind=unique.length===3?'Triángulo':unique.length===4?'Cuadrilátero':'Polígono';
-                    }
-                }
-            }
-            if (!shape) return false;
-            const previousLock=isHistoryLocked;
-            isHistoryLocked=true;
-            try {
-                if (oldPath) canvas.remove(oldPath);
-                canvas.add(shape);
-                canvas.setActiveObject(shape);
-                canvas.requestRenderAll();
-            } finally {
-                isHistoryLocked=previousLock;
-            }
-            if (!isHistoryLocked) saveStateToHistory();
-            showToast(kind+' corregido automáticamente','fa-draw-polygon');
-            return true;
-        }
 
         // --- Tools & Shortcuts (#9) ---
         function setTool(tool) {
